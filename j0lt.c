@@ -43,7 +43,7 @@ typedef enum __opcode__ {
 // END OPCODE
 #define 	AA 0 // Authoritative Answer
 #define 	TC 0 // TrunCation
-#define 	RD 1 // Recursion Desired 
+#define 	RD 1 // Recursion Desired   (END OF BYTE 3)
 #define 	RA 0 // Recursion Available
 #define 	Z  0 // Reserved
 #define 	AD 1 // Authentic Data (DNS-SEC)
@@ -63,7 +63,7 @@ typedef enum __rcode__ {
 #define 	QDCOUNT 1 // num entry question
 #define 	ANCOUNT 0 // num RR answer
 #define 	NSCOUNT 0 // num NS RR 
-#define 	ARCOUNT 1 // num RR additional
+#define 	ARCOUNT 0 // num RR additional
 // END HEADER VALUES
 
 struct __attribute__((packed, aligned(1))) J0LT_HEADER
@@ -233,10 +233,13 @@ create_dns_packet(uint8_t pktbuf[ ], size_t* buflen,
 int
 main(int argc, char** argv)
 {
-    struct sockaddr_in addr;
+    struct sockaddr_in addr, srcaddr;
     int sockfd;
     size_t buflen = BUF_MAX;
     uint8_t pktbuf[ BUF_MAX ];
+    uint8_t recvbuf[ BUF_MAX ];
+    socklen_t srcaddrlen;
+
     struct J0LT_HEADER header = {
         ID,
         RD, TC, AA, OPCODE, QR,
@@ -267,12 +270,14 @@ main(int argc, char** argv)
     printf("ANCOUNT: 0x%.4x\n", header.ancount);
     printf("NSCOUNT: 0x%.4x\n", header.nscount);
     printf("ARCOUNT: 0x%.4x\n", header.arcount);
+
 #endif // DEBUG
 
     if (argc != 4) {
         goto fail_state;
     }
 
+    memset(pktbuf, BUF_MAX, 0);
     if (create_dns_packet(pktbuf, &buflen,
         &header, argv[ 3 ],
         QTYPE, QCLASS) == false) {
@@ -289,6 +294,10 @@ main(int argc, char** argv)
     sendto(sockfd, pktbuf, BUF_MAX - buflen, 0,
        ( const struct sockaddr* ) &addr,
        sizeof(addr));
+
+    memset(recvbuf, 0, BUF_MAX);
+    recvfrom(sockfd, recvbuf, BUF_MAX - 1, 0,
+    ( struct sockaddr* ) &srcaddr, &srcaddrlen);
     close(sockfd);
 
     return 0;
