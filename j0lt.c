@@ -28,6 +28,97 @@
 #define 	__BYTE_ORDER __LITTLE_ENDIAN
 #endif // __BYTE_ORDER
 
+/* Type of Service
+ *
+ *  Bits 0-2:  Precedence.
+ *  Bit    3:  Stream or Datagram.
+ *  Bits 4-5:  Reliability.
+ *  Bit    6:  Speed over Reliability.
+ *  Bits   7:  Speed.
+ *
+ *     0     1     2     3     4     5     6     7
+ *  +-----+-----+-----+-----+-----+-----+-----+-----+
+ *  |                 |     |           |     |     |
+ *  |   PRECEDENCE    | STRM|RELIABILITY| S/R |SPEED|
+ *  |                 |     |           |     |     |
+ *  +-----+-----+-----+-----+-----+-----+-----+-----+
+ *
+ *  PRECEDENCE          STRM      RELIABILITY  S/R      SPEED
+ *  111-Flash Override  1-STREAM  11-highest   1-speed  1-high
+ *  110-Flash           0-DTGRM   10-higher    0-rlblt  0-low
+ *  11X-Immediate                 01-lower
+ *  01X-Priority                  00-lowest
+ *  00X-Routine
+ */
+struct __attribute__((packed, aligned(1))) J0LT_TOS
+{
+#if __BYTE_ORDER == __BIG_ENDIAN
+    uint8_t     precedence : 3;
+    uint8_t     strm : 1;
+    uint8_t     reliability : 2;
+    uint8_t     sr : 1;
+    uint8_t     speed : 1;
+#endif
+
+#if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
+    uint8_t     speed : 1;
+    uint8_t     sr : 1;
+    uint8_t     reliability : 2;
+    uint8_t     strm : 1;
+    uint8_t     precedence : 3;
+#endif; 
+};
+
+/* IP
+ *
+ *  0                   1                   2                   3
+ *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |Version|  IHL  |Type of Service|          Total Length         |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |         Identification        |Flags|      Fragment Offset    |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |  Time to Live |    Protocol   |         Header Checksum       |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |                       Source Address                          |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |                    Destination Address                        |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |                    Options                    |    Padding    |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ */
+struct __attribute__((packed, aligned(1))) J0LT_IPHDR
+{
+#if __BYTE_ORDER == __BIG_ENDIAN
+    uint8_t    version : 4; // format of the internet header (ipv4)
+    uint8_t    ihl : 4;     // len of internet header in 32 bit words,
+                            // and thus points to the beginning of the data.
+#endif
+
+#if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
+    uint8_t    ihl : 4;
+    uint8_t    version : 4;
+#endif
+    struct J0LT_TOS tos;
+    uint16_t    total_len; // length of the datagram
+
+    uint16_t    ID;
+#if __BYTE_ORDER == __BIG_ENDIAN
+    uint16_t    flags : 3;
+    uint16_t    offset : 13;
+#endif 
+
+#if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
+    uint16_t    offset : 13;
+    uint16_t    flags : 3;
+#endif 
+    uint8_t     ttl; // maximum time
+    uint8_t     protocol;
+    uint16_t    checksum;
+    uint32_t    sourceaddr;
+    uint32_t    destaddr;
+};
+
 // HEADER VALUES 
 #define 	ID 0x1337
 #define 	QR 0 // query (0), response (1).
@@ -358,6 +449,7 @@ retrieve_dns_packet(uint8_t recvbuf[ ], size_t* buflen,
     }
 
     memcpy(recvheader, ( struct J0LT_HEADER* ) curpos, stepsz);
+    recvheader = ( struct J0LT_HEADER* ) curpos;
     recvheader->id = ntohs(recvheader->id);
     recvheader->qdcount = ntohs(recvheader->qdcount);
     recvheader->ancount = ntohs(recvheader->ancount);
