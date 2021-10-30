@@ -141,6 +141,36 @@ struct __attribute__((packed, aligned(1))) J0LT_UDPHDR
 #endif
 };
 
+/* pseudo header
+ *  0      7 8     15 16    23 24    31
+ * +--------+--------+--------+--------+
+ * |          source address           |
+ * +--------+--------+--------+--------+
+ * |        destination address        |
+ * +--------+--------+--------+--------+
+ * |  zero  |protocol|   UDP length    |
+ * +--------+--------+--------+--------+
+ */
+struct __attribute__((packed, aligned(1))) J0LT_PSEUDOHDR
+{
+    uint32_t sourceaddr;
+    uint32_t destaddr;
+
+#if __BYTE_ORDER == __BIGENDIAN 
+    uint32_t zero : 8;
+    uint32_t protocol : 8;
+    uint32_t udplen : 16;
+#endif
+
+#if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
+    uint32_t udplen : 16;
+    uint32_t protocol : 8;
+    uint32_t zero : 8;
+#endif
+}
+
+
+
 /* Various Control Flags
 *
 * Bit 0: reserved, must be zero

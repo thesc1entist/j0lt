@@ -66,6 +66,27 @@ struct __attribute__((packed, aligned(1))) J0LT_TOS
 #endif; 
 };
 
+#define     IHL_MIN 5
+#define     IHL_MAX 15
+
+struct __attribute__((packed, aligned(1))) J0LT_PSEUDOHDR
+{
+    uint32_t sourceaddr;
+    uint32_t destaddr;
+
+#if __BYTE_ORDER == __BIGENDIAN 
+    uint32_t zero : 8;
+    uint32_t protocol : 8;
+    uint32_t udplen : 16;
+#endif
+
+#if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
+    uint32_t udplen : 16;
+    uint32_t protocol : 8;
+    uint32_t zero : 8;
+#endif
+}
+
 struct __attribute__((packed, aligned(1))) J0LT_IPHDR
 {
 #if __BYTE_ORDER == __BIG_ENDIAN
@@ -81,7 +102,7 @@ struct __attribute__((packed, aligned(1))) J0LT_IPHDR
     struct J0LT_TOS tos;
     uint16_t    total_len; // length of the datagram
 
-    uint16_t    ID;
+    uint16_t    id;
 #if __BYTE_ORDER == __BIG_ENDIAN
     uint16_t    flags : 3;
     uint16_t    offset : 13;
@@ -97,7 +118,7 @@ struct __attribute__((packed, aligned(1))) J0LT_IPHDR
     uint32_t    sourceaddr;
     uint32_t    destaddr;
 };
-
+#define     IPVER 4
 #define     ID 0x1337
 #define     QR 0 // query (0), response (1).
 
@@ -317,6 +338,7 @@ main(int argc, char** argv)
     };
 
     struct J0LT_IPHDR iphdr;
+    struct J0LT_UDPHDR udphdr;
 
     printf("%s", g_ansi);
 
@@ -351,6 +373,76 @@ main(int argc, char** argv)
 
 fail_state:
     exit(EXIT_FAILURE);
+}
+
+/* IP
+ *
+ *  0                   1                   2                   3
+ *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |Version|  IHL  |Type of Service|          Total Length         |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |         Identification        |Flags|      Fragment Offset    |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |  Time to Live |    Protocol   |         Header Checksum       |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |                       Source Address                          |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |                    Destination Address                        |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |                    Options                    |    Padding    |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ */
+
+void
+pack_iphdr(struct J0LT_IPHDR* iphdr, const char* sourceip,
+        const char* destip)
+{
+    memset(&iphdr, 0, sizeof(struct J0LT_IPHDR));
+    iphdr->version = IPVER;
+    iphdr->ihl = IHL_MIN;
+    iphdr->id = htonl(ID);
+    iphdr->offset = 0;
+    iphdr->flags = 0;
+    iphdr->ttl = 0xff;
+    iphdr->protocol = getprotobyname("udp")->p_proto;
+    iphdr->checksum = 0;
+}
+
+void
+pack_udphdr(struct J0LT_UDPHDR* udphdr, size_t nwritten,
+        const char* port)
+{
+    udphdr->dstprt = ( uint16_t ) strtol(port, NULL, 0);
+    udphdr->dstprt = htons(udphdr->dstprt);
+    udphdr->srcprt = 0x00;
+    udphdr->len = nwritten + sizeof(struct J0LT_UDPHDR);
+    checksum( );
+}
+
+int
+connect_client(const char* server, const char*
+        port, struct sockaddr_in* addr)
+{
+    int raw_socket;
+    uint16_t port_uint16;
+
+    raw_socket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+
+    errno = 0;
+    port_uint16 = ( uint16_t ) strtol(port, NULL, 0);
+    if (errno != 0) {
+        perror("port error: strtol");
+        exit(EXIT_FAILURE);
+    }
+
+    memset(addr, 0, sizeof(addr));
+
+    addr->sin_family = AF_INET;
+    addr->sin_port = htons(port_uint16);
+    addr->sin_addr.s_addr = inet_addr(server);
+
+    return raw_socket;
 }
 
 bool
@@ -460,31 +552,6 @@ insert_data(void** dst, size_t* dst_buflen,
     *dst_buflen -= src_len;
 
     return true;
-}
-
-int
-connect_client(const char* server, const char*
-        port, struct sockaddr_in* addr)
-{
-    int raw_socket;
-    uint16_t port_uint16;
-
-    raw_socket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-
-    errno = 0;
-    port_uint16 = ( uint16_t ) strtol(port, NULL, 0);
-    if (errno != 0) {
-        perror("port error: strtol");
-        exit(EXIT_FAILURE);
-    }
-
-    memset(addr, 0, sizeof(addr));
-
-    addr->sin_family = AF_INET;
-    addr->sin_port = htons(port_uint16);
-    addr->sin_addr.s_addr = inet_addr(server);
-
-    return raw_socket;
 }
 
 uint16_t
