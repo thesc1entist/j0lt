@@ -28,28 +28,6 @@
 #define 	__BYTE_ORDER __LITTLE_ENDIAN
 #endif // __BYTE_ORDER
 
-/* Type of Service
- *
- *  Bits 0-2:  Precedence.
- *  Bit    3:  Stream or Datagram.
- *  Bits 4-5:  Reliability.
- *  Bit    6:  Speed over Reliability.
- *  Bits   7:  Speed.
- *
- *     0     1     2     3     4     5     6     7
- *  +-----+-----+-----+-----+-----+-----+-----+-----+
- *  |                 |     |           |     |     |
- *  |   PRECEDENCE    | STRM|RELIABILITY| S/R |SPEED|
- *  |                 |     |           |     |     |
- *  +-----+-----+-----+-----+-----+-----+-----+-----+
- *
- *  PRECEDENCE          STRM      RELIABILITY  S/R      SPEED
- *  111-Flash Override  1-STREAM  11-highest   1-speed  1-high
- *  110-Flash           0-DTGRM   10-higher    0-rlblt  0-low
- *  11X-Immediate                 01-lower
- *  01X-Priority                  00-lowest
- *  00X-Routine
- */
 struct __attribute__((packed, aligned(1))) J0LT_TOS
 {
 #if __BYTE_ORDER == __BIG_ENDIAN
@@ -69,24 +47,6 @@ struct __attribute__((packed, aligned(1))) J0LT_TOS
 #endif; 
 };
 
-/* IP
- *
- *  0                   1                   2                   3
- *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |Version|  IHL  |Type of Service|          Total Length         |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |         Identification        |Flags|      Fragment Offset    |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |  Time to Live |    Protocol   |         Header Checksum       |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |                       Source Address                          |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |                    Destination Address                        |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |                    Options                    |    Padding    |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- */
 struct __attribute__((packed, aligned(1))) J0LT_IPHDR
 {
 #if __BYTE_ORDER == __BIG_ENDIAN
@@ -119,10 +79,9 @@ struct __attribute__((packed, aligned(1))) J0LT_IPHDR
     uint32_t    destaddr;
 };
 
-// HEADER VALUES 
 #define 	ID 0x1337
 #define 	QR 0 // query (0), response (1).
-// OPCODE VALS 
+
 typedef enum __opcode__ {
     OP_QUERY = 0,
     OP_IQUERY = 1,
@@ -131,7 +90,7 @@ typedef enum __opcode__ {
     OP_UPDATE = 4
 } opcode;
 #define 	OPCODE OP_QUERY
-// END OPCODE
+
 #define 	AA 0 // Authoritative Answer
 #define 	TC 0 // TrunCation
 #define 	RD 1 // Recursion Desired   (END OF BYTE 3)
@@ -139,7 +98,7 @@ typedef enum __opcode__ {
 #define 	Z  0 // Reserved
 #define 	AD 1 // Authentic Data (DNS-SEC)
 #define 	CD 0 // Checking Disabled (DNS-SEC)
-// RCODE
+
 typedef enum __rcode__ {
     RC_NO_ER = 0,
     RC_FMT_ERR = 1,
@@ -149,13 +108,11 @@ typedef enum __rcode__ {
     RC_REFUSED = 5
 } rcode;
 #define 	RCODE RC_NO_ER
-// END RCODE
 
 #define 	QDCOUNT 1 // num entry question
 #define 	ANCOUNT 0 // num RR answer
 #define 	NSCOUNT 0 // num NS RR 
 #define 	ARCOUNT 0 // num RR additional
-// END HEADER VALUES
 
 struct __attribute__((packed, aligned(1))) J0LT_HEADER
 {
@@ -196,7 +153,6 @@ struct __attribute__((packed, aligned(1))) J0LT_HEADER
     uint16_t    arcount : 16;
 };
 
-// TYPE
 typedef enum __type__ {
     T_A = 1,// host address
     T_NS = 2,// authoritative name server
@@ -220,9 +176,7 @@ typedef enum __type__ {
     QT_ALL = 255 // req all records
 } type;
 #define 	QTYPE QT_ALL
-// END TYPE
 
-// CLASS values
 typedef enum __class__ {
     C_IN = 1, // the Internet
     C_CS = 2, // the CSNET class
@@ -231,7 +185,6 @@ typedef enum __class__ {
     QC_ALL = 255, // anyclass
 } class;
 #define     QCLASS QC_ALL
-// END CLASS 
 
 #define DEFINE_INSERT_FN(typename, datatype)		\
     bool insert_##typename                          \
@@ -283,6 +236,7 @@ DEFINE_INSERT_FN(qword, uint64_t)
 
 #define 	DEBUG   1
 #define 	BUF_MAX 0x200
+
 const char* g_ansi = {
     " Usage: sudo ./j0lt [OPTION]...          \n"
     "                                         \n"
