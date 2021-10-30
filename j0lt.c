@@ -114,7 +114,7 @@ typedef enum __rcode__ {
 #define     NSCOUNT 0 // num NS RR 
 #define     ARCOUNT 0 // num RR additional
 
-struct __attribute__((packed, aligned(1))) J0LT_HEADER
+struct __attribute__((packed, aligned(1))) J0LT_DNSHDR
 {
     uint16_t        id : 16;
 #if __BYTE_ORDER == __BIG_ENDIAN
@@ -267,16 +267,16 @@ insert_data(void** dst, size_t* dst_buflen,
         const void* src, size_t src_len);
 bool
 insert_header(uint8_t** buf, size_t* buflen,
-        const struct J0LT_HEADER* header);
+        const struct J0LT_DNSHDR* header);
 bool
 create_dns_packet(uint8_t pktbuf[ ], size_t* buflen,
-        const struct J0LT_HEADER* header,
+        const struct J0LT_DNSHDR* header,
         const char* domain,
         uint16_t query_type,
         uint16_t query_class);
 bool
 retrieve_dns_packet(uint8_t recvbuf[ ], size_t* buflen,
-        struct J0LT_HEADER* recvheader);
+        struct J0LT_DNSHDR* recvheader);
 uint16_t
 remove_word(uint8_t** buf, size_t* buflen);
 uint8_t
@@ -294,8 +294,8 @@ main(int argc, char** argv)
     size_t buflen, recvlen, nwritten;
     uint8_t pktbuf[ BUF_MAX ];
     uint8_t recvbuf[ BUF_MAX ];
-    struct J0LT_HEADER recvheader;
-    struct J0LT_HEADER sndheader = {
+    struct J0LT_DNSHDR recvheader;
+    struct J0LT_DNSHDR sndheader = {
         ID,
         RD, TC, AA, OPCODE, QR,
         RCODE, CD, AD, Z, RA,
@@ -394,18 +394,18 @@ fail_state:
 
 bool
 retrieve_dns_packet(uint8_t recvbuf[ ], size_t* buflen,
-        struct J0LT_HEADER* recvheader)
+        struct J0LT_DNSHDR* recvheader)
 {
     uint8_t* curpos = recvbuf;
     size_t stepsz;
 
-    stepsz = sizeof(struct J0LT_HEADER);
+    stepsz = sizeof(struct J0LT_DNSHDR);
     if (stepsz > *buflen) {
         return false;
     }
 
-    memcpy(recvheader, ( struct J0LT_HEADER* ) curpos, stepsz);
-    recvheader = ( struct J0LT_HEADER* ) curpos;
+    memcpy(recvheader, ( struct J0LT_DNSHDR* ) curpos, stepsz);
+    recvheader = ( struct J0LT_DNSHDR* ) curpos;
     recvheader->id = ntohs(recvheader->id);
     recvheader->qdcount = ntohs(recvheader->qdcount);
     recvheader->ancount = ntohs(recvheader->ancount);
@@ -450,7 +450,7 @@ remove_word(uint8_t** buf, size_t* buflen)
 
 bool
 create_dns_packet(uint8_t pktbuf[ ], size_t* buflen,
-        const struct J0LT_HEADER* header,
+        const struct J0LT_DNSHDR* header,
         const char* domain,
         uint16_t query_type,
         uint16_t query_class)
@@ -468,7 +468,7 @@ create_dns_packet(uint8_t pktbuf[ ], size_t* buflen,
 
 bool
 insert_header(uint8_t** buf, size_t*
-        buflen, const struct J0LT_HEADER* header)
+        buflen, const struct J0LT_DNSHDR* header)
 {
     bool status;
     uint8_t third_byte, fourth_byte;
