@@ -281,6 +281,8 @@ uint16_t
 remove_word(uint8_t** buf, size_t* buflen);
 uint8_t
 remove_byte(uint8_t** buf, size_t* buflen);
+uint16_t
+checksum(const long* addr, int count);
 
 int
 main(int argc, char** argv)
@@ -578,4 +580,24 @@ connect_client(const char* server, const char*
     udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
 
     return udp_socket;
+}
+
+uint16_t
+checksum(const long* addr, int count)
+{
+    register long sum = 0;
+
+    while (count > 1) {
+        sum += *( unsigned short* ) addr++;
+        count -= 2;
+    }
+
+    if (count > 0) {
+        sum += *( unsigned char* ) addr;
+    }
+
+    while (sum >> 16) {
+        sum = (sum & 0xffff) + (sum >> 16);
+    }
+    return ~sum;
 }
