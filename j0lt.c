@@ -28,6 +28,8 @@
 #define     __BYTE_ORDER __LITTLE_ENDIAN
 #endif // __BYTE_ORDER
 
+#define     FLAGS_DF 0b010
+#define     FLAGS_MF 0b001
 struct __attribute__((packed, aligned(1))) J0LT_TOS
 {
 #if __BYTE_ORDER == __BIG_ENDIAN
@@ -274,13 +276,6 @@ create_dns_packet(uint8_t pktbuf[ ], size_t* buflen,
         const char* domain,
         uint16_t query_type,
         uint16_t query_class);
-bool
-retrieve_dns_packet(uint8_t recvbuf[ ], size_t* buflen,
-        struct J0LT_DNSHDR* recvheader);
-uint16_t
-remove_word(uint8_t** buf, size_t* buflen);
-uint8_t
-remove_byte(uint8_t** buf, size_t* buflen);
 uint16_t
 checksum(const long* addr, int count);
 
@@ -293,8 +288,7 @@ main(int argc, char** argv)
 
     size_t buflen, recvlen, nwritten;
     uint8_t pktbuf[ BUF_MAX ];
-    uint8_t recvbuf[ BUF_MAX ];
-    struct J0LT_DNSHDR recvheader;
+
     struct J0LT_DNSHDR sndheader = {
         ID,
         RD, TC, AA, OPCODE, QR,
@@ -328,7 +322,7 @@ main(int argc, char** argv)
 
     // sockfd = connect_client(argv[ 1 ], argv[ 2 ], &addr);
 
-    nwritten = BUF_MAX - buflen; // verbose. 
+    nwritten = BUF_MAX - buflen;
     sendto(raw_sockfd, pktbuf, nwritten, 0,
         ( const struct sockaddr* ) &addr,
         sizeof(addr));
@@ -338,62 +332,6 @@ main(int argc, char** argv)
 
 fail_state:
     exit(EXIT_FAILURE);
-}
-
-bool
-retrieve_dns_packet(uint8_t recvbuf[ ], size_t* buflen,
-        struct J0LT_DNSHDR* recvheader)
-{
-    uint8_t* curpos = recvbuf;
-    size_t stepsz;
-
-    stepsz = sizeof(struct J0LT_DNSHDR);
-    if (stepsz > *buflen) {
-        return false;
-    }
-
-    memcpy(recvheader, ( struct J0LT_DNSHDR* ) curpos, stepsz);
-    recvheader = ( struct J0LT_DNSHDR* ) curpos;
-    recvheader->id = ntohs(recvheader->id);
-    recvheader->qdcount = ntohs(recvheader->qdcount);
-    recvheader->ancount = ntohs(recvheader->ancount);
-    recvheader->nscount = ntohs(recvheader->nscount);
-    recvheader->arcount = ntohs(recvheader->arcount);
-    curpos += stepsz;
-    *buflen -= stepsz;
-
-    return true;
-}
-
-uint8_t
-remove_byte(uint8_t** buf, size_t* buflen)
-{
-    uint8_t retval;
-    if (*buflen < 1) {
-        return -1;
-    }
-
-    retval = *(*buf)++;
-    *buflen--;
-
-    return retval;
-}
-
-uint16_t
-remove_word(uint8_t** buf, size_t* buflen)
-{
-    uint16_t retval;
-
-    if (*buflen < 2) {
-        return -1;
-    }
-
-    retval = *(*buf)++ << 8;
-    retval |= *(*buf)++;
-
-    *buflen -= 2;
-
-    return retval;
 }
 
 bool
