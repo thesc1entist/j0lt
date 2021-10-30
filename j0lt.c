@@ -186,47 +186,47 @@ typedef enum __class__ {
 } class;
 #define         QCLASS QC_ALL
 
-#define DEFINE_INSERT_FN(typename, datatype)		\
-    bool insert_##typename                          \
-    (uint8_t** buf, size_t* buflen, datatype data)	\
-    {                                               \
-        uint64_t msb_mask, lsb_mask,                    \
-            bigendian_data, lsb, msb;                   \
-        size_t byte_pos, nbits;                         \
-                                                    \
-        if (*buflen < 1) {                              \
-            return false;                               \
+#define DEFINE_INSERT_FN(typename, datatype)            \
+        bool insert_##typename                          \
+        (uint8_t** buf, size_t* buflen, datatype data)  \
+        {                                               \
+                uint64_t msb_mask, lsb_mask,            \
+                    bigendian_data, lsb, msb;           \
+                size_t byte_pos, nbits;                 \
+                                                        \
+                if (*buflen < 1) {                      \
+                    return false;                       \
+                }                                       \
+                                                        \
+                nbits = sizeof(data) << 3;              \
+                bigendian_data = 0ULL;                  \
+                byte_pos = (nbits / 8) - 1;             \
+                lsb_mask = 0xffULL;                     \
+                msb_mask = lsb_mask << nbits - 8;       \
+                                                        \
+                byte_pos = byte_pos << 3;               \
+                for (int i = nbits >> 4; i != 0; i--) { \
+                    lsb = (data & lsb_mask);            \
+                    msb = (data & msb_mask);            \
+                    lsb <<= byte_pos;                   \
+                    msb >>= byte_pos;                   \
+                    bigendian_data |= lsb | msb;        \
+                    msb_mask >>= 8;                     \
+                    lsb_mask <<= 8;                     \
+                    byte_pos -= (2 << 3);               \
+                }                                       \
+                                                        \
+                data = bigendian_data == 0 ?            \
+                    data : bigendian_data;              \
+                for (int i = sizeof(data);              \
+                     *buflen != -1 && i > 0; i--) {     \
+                    *(*buf)++ = (data & 0xff);          \
+                    data >>= 8;                         \
+                    (*buflen)--;                        \
+                }                                       \
+                                                        \
+                return data == 0;                       \
         }                                               \
-                                                    \
-        nbits = sizeof(data) << 3;                      \
-        bigendian_data = 0ULL;                          \
-        byte_pos = (nbits / 8) - 1;                     \
-        lsb_mask = 0xffULL;                             \
-        msb_mask = lsb_mask << nbits - 8;               \
-                                                    \
-        byte_pos = byte_pos << 3;                       \
-        for (int i = nbits >> 4; i != 0; i--) {         \
-            lsb = (data & lsb_mask);                    \
-            msb = (data & msb_mask);                    \
-            lsb <<= byte_pos;                           \
-            msb >>= byte_pos;                           \
-            bigendian_data |= lsb | msb;                \
-            msb_mask >>= 8;                             \
-            lsb_mask <<= 8;                             \
-            byte_pos -= (2 << 3);                       \
-        }                                               \
-                                                    \
-        data = bigendian_data == 0 ?                    \
-            data : bigendian_data;                      \
-        for (int i = sizeof(data);                      \
-             *buflen != -1 && i > 0; i--) {             \
-            *(*buf)++ = (data & 0xff);                  \
-            data >>= 8;                                 \
-            (*buflen)--;                                \
-        }                                               \
-                                                    \
-        return data == 0;                               \
-    }                                               \
 
 DEFINE_INSERT_FN(byte, uint8_t)
 DEFINE_INSERT_FN(word, uint16_t)
