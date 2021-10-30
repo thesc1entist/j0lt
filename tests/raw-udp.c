@@ -94,7 +94,7 @@ struct __attribute__((packed, aligned(1))) J0LT_IPHDR
     struct J0LT_TOS tos;
     uint16_t    total_len; // length of the datagram
 
-    uint16_t    ID;
+    uint16_t    id;
 #if __BYTE_ORDER == __BIG_ENDIAN
     uint16_t    flags : 3;
     uint16_t    offset : 13;
@@ -176,7 +176,7 @@ int main(int argc, char** argv)
 
     memset(&iphdr, 0, sizeof(struct J0LT_IPHDR));
     iphdr.version = IPVER;
-    iphdr.ID = htonl(0x1337);
+    iphdr.id = htonl(0x1337);
     iphdr.offset = 0;
     iphdr.flags = 0;
     iphdr.ttl = 0xff;
