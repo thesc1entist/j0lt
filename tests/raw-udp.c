@@ -124,6 +124,22 @@ struct __attribute__((packed, aligned(1))) J0LT_IPHDR
  * |          data octets ...
  * +---------------- ...
  */
+struct __attribute__((packed, aligned(1))) J0LT_UDPHDR
+{
+#if __BYTE_ORDER == __BIG_ENDIAN
+    uint64_t    srcprt : 16;
+    uint64_t    dstprt : 16;
+    uint64_t    len : 16;
+    uint64_t    checksum : 16;
+#endif
+
+#if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
+    uint64_t    checksum : 16;
+    uint64_t    len : 16;
+    uint64_t    dstprt : 16;
+    uint64_t    srcprt : 16;
+#endif
+};
 
 /* Various Control Flags
 *

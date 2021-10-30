@@ -28,6 +28,23 @@
 #define     __BYTE_ORDER __LITTLE_ENDIAN
 #endif // __BYTE_ORDER
 
+struct __attribute__((packed, aligned(1))) J0LT_UDPHDR
+{
+#if __BYTE_ORDER == __BIG_ENDIAN
+    uint64_t    srcprt : 16;
+    uint64_t    dstprt : 16;
+    uint64_t    len : 16;
+    uint64_t    checksum : 16;
+#endif
+
+#if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
+    uint64_t    checksum : 16;
+    uint64_t    len : 16;
+    uint64_t    dstprt : 16;
+    uint64_t    srcprt : 16;
+#endif
+};
+
 #define     FLAGS_DF 0b010
 #define     FLAGS_MF 0b001
 struct __attribute__((packed, aligned(1))) J0LT_TOS
@@ -286,7 +303,7 @@ main(int argc, char** argv)
     socklen_t srcaddrlen;
     int raw_sockfd;
 
-    size_t buflen, recvlen, nwritten;
+    size_t buflen, nwritten;
     uint8_t pktbuf[ BUF_MAX ];
 
     struct J0LT_DNSHDR sndheader = {
@@ -299,9 +316,11 @@ main(int argc, char** argv)
         ARCOUNT
     };
 
+    struct J0LT_IPHDR iphdr;
+
     printf("%s", g_ansi);
 
-    if (argc != 4) {
+    if (argc != 5) {
         goto fail_state;
     }
 
