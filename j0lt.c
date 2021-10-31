@@ -190,7 +190,7 @@ main(int argc, char** argv)
     victimport = argv[ 4 ];
 
     buflen = NS_PACKETSZ;
-    memset(pktbuf, NS_PACKETSZ, 0);
+    memset(pktbuf, 0, NS_PACKETSZ);
 
     curpos = pktbuf;
     status = true;
@@ -208,6 +208,7 @@ main(int argc, char** argv)
     addr.sin_port = udpheader.uh_dport;
     addr.sin_addr.s_addr = ipheader.saddr;
 
+    memset(datagram, 0, NS_PACKETSZ);
     curpos = datagram;
     status &= insert_ip_header(&curpos, &buflen, &ipheader);
     status &= insert_udp_header(&curpos, &buflen, &udpheader);
