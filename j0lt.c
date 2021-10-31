@@ -302,12 +302,13 @@ insert_udp_header(uint8_t** buf, size_t* buflen, const UDPHEADER* header)
 {
     bool status;
 
-    insert_word(buf, buflen, header->uh_dport);
-    insert_word(buf, buflen, header->uh_sport);
-    insert_word(buf, buflen, header->uh_ulen);
-    insert_word(buf, buflen, header->uh_sum);
+    status = true;
+    status &= insert_word(buf, buflen, header->uh_dport);
+    status &= insert_word(buf, buflen, header->uh_sport);
+    status &= insert_word(buf, buflen, header->uh_ulen);
+    status &= insert_word(buf, buflen, header->uh_sum);
 
-    return true;
+    return status;
 }
 
 bool
