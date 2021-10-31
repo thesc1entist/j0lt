@@ -294,9 +294,6 @@ const char* g_ansi = {
     "            the-scientist@rootstorm.com\n\n"
 };
 
-int
-connect_client(const char* server, const char* port,
-        struct sockaddr_in* addr);
 bool
 insert_question(void** buf, size_t* buflen,
         const char* domain,
@@ -339,6 +336,7 @@ main(int argc, char** argv)
 
     struct J0LT_IPHDR iphdr;
     struct J0LT_UDPHDR udphdr;
+    struct J0LT_PSEUDOHDR pseudohdr;
 
     printf("%s", g_ansi);
 
@@ -361,6 +359,10 @@ main(int argc, char** argv)
         goto fail_state;
     }
 
+    addr.sin_family = AF_INET;
+    addr.sin_port = udphdr.dstprt;
+    addr.sin_addr.s_addr = iphdr.sourceaddr;
+
     // sockfd = connect_client(argv[ 1 ], argv[ 2 ], &addr);
 
     nwritten = BUF_MAX - buflen;
@@ -375,59 +377,34 @@ fail_state:
     exit(EXIT_FAILURE);
 }
 
-/* IP
- *
- *  0                   1                   2                   3
- *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |Version|  IHL  |Type of Service|          Total Length         |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |         Identification        |Flags|      Fragment Offset    |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |  Time to Live |    Protocol   |         Header Checksum       |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |                       Source Address                          |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |                    Destination Address                        |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- * |                    Options                    |    Padding    |
- * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- */
-
 void
-pack_iphdr(struct J0LT_IPHDR* iphdr, const char* sourceip,
-        const char* destip)
+pack_iphdr(struct J0LT_IPHDR* iphdr, struct J0LT_PSEUDOHDR* pseudohdr,
+        const char* sourceip, const char* destip,
+        size_t nwritten, size_t udpsz)
 {
     memset(&iphdr, 0, sizeof(struct J0LT_IPHDR));
     iphdr->version = IPVER;
     iphdr->ihl = IHL_MIN;
+    iphdr->total_len = htons(sizeof(struct J0LT_IPHDR) + nwritten + udpsz);
     iphdr->id = htonl(ID);
-    iphdr->offset = 0;
-    iphdr->flags = 0;
     iphdr->ttl = 0xff;
     iphdr->protocol = getprotobyname("udp")->p_proto;
-    iphdr->checksum = 0;
+    iphdr->sourceaddr = inet_addr(sourceip);
+    iphdr->destaddr = inet_addr(destip);
+
+    memset(&pseudohdr, 0, sizeof(struct J0LT_PSEUDOHDR));
+    pseudohdr->protocol = iphdr->protocol;
+    pseudohdr->destaddr = iphdr->destaddr;
+    pseudohdr->sourceaddr = iphdr->sourceaddr;
+
+    iphdr->checksum = checksum(&iphdr, sizeof(struct J0LT_IPHDR));
 }
 
 void
-pack_udphdr(struct J0LT_UDPHDR* udphdr, size_t nwritten,
-        const char* port)
+pack_udphdr(struct J0LT_UDPHDR* udphdr, struct J0LT_PSEUDOHDR* pseudohdr,
+        size_t nwritten, const char* port, struct sockaddr_in* addr)
 {
-    udphdr->dstprt = ( uint16_t ) strtol(port, NULL, 0);
-    udphdr->dstprt = htons(udphdr->dstprt);
-    udphdr->srcprt = 0x00;
-    udphdr->len = nwritten + sizeof(struct J0LT_UDPHDR);
-    checksum( );
-}
-
-int
-connect_client(const char* server, const char*
-        port, struct sockaddr_in* addr)
-{
-    int raw_socket;
     uint16_t port_uint16;
-
-    raw_socket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
 
     errno = 0;
     port_uint16 = ( uint16_t ) strtol(port, NULL, 0);
@@ -436,13 +413,13 @@ connect_client(const char* server, const char*
         exit(EXIT_FAILURE);
     }
 
-    memset(addr, 0, sizeof(addr));
+    memset(&udphdr, 0, sizeof(struct J0LT_UDPHDR));
+    udphdr->dstprt = htons(port_uint16);
+    udphdr->srcprt = 0x00;
+    udphdr->len = htons(nwritten + sizeof(struct J0LT_UDPHDR));
+    pseudohdr->udplen = udphdr->len;
 
-    addr->sin_family = AF_INET;
-    addr->sin_port = htons(port_uint16);
-    addr->sin_addr.s_addr = inet_addr(server);
-
-    return raw_socket;
+    udphdr->checksum = checksum(&pseudohdr, sizeof(struct J0LT_PSEUDOHDR));
 }
 
 bool
