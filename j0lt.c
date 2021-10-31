@@ -313,7 +313,13 @@ create_dns_packet(uint8_t pktbuf[ ], size_t* buflen,
         uint16_t query_class);
 uint16_t
 checksum(const long* addr, int count);
-
+void
+pack_iphdr(struct J0LT_IPHDR* iphdr, struct J0LT_PSEUDOHDR* pseudohdr,
+        const char* sourceip, const char* destip,
+        size_t nwritten, size_t udpsz);
+void
+pack_udphdr(struct J0LT_UDPHDR* udphdr, struct J0LT_PSEUDOHDR* pseudohdr,
+        size_t nwritten, const char* port, struct sockaddr_in* addr);
 int
 main(int argc, char** argv)
 {
@@ -362,8 +368,6 @@ main(int argc, char** argv)
     addr.sin_family = AF_INET;
     addr.sin_port = udphdr.dstprt;
     addr.sin_addr.s_addr = iphdr.sourceaddr;
-
-    // sockfd = connect_client(argv[ 1 ], argv[ 2 ], &addr);
 
     nwritten = BUF_MAX - buflen;
     sendto(raw_sockfd, pktbuf, nwritten, 0,
