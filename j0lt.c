@@ -181,7 +181,7 @@ main(int argc, char** argv)
         goto fail_state;
     }
 
-#if DEBUG == 0
+#if !DEBUG
     raw_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     if (raw_sockfd == -1) {
         goto fail_state;
@@ -222,16 +222,19 @@ main(int argc, char** argv)
     szdatagram = buflen;
     insert_data(( void** ) &curpos, &szdatagram, pktbuf, nwritten);
 
-#if DEBUG == 0
+#if !DEBUG
     sendto(raw_sockfd, pktbuf, nwritten, 0, ( const struct sockaddr* ) &addr, sizeof(addr));
+    close(raw_sockfd);
+#else 
+    for (int i = 0; i < NS_PACKETSZ - buflen; i++)
+        printf("%x ", datagram[ i ]);
 #endif
 
-    close(raw_sockfd);
-
     return 0;
-
 fail_close:
+#if !DEBUG
     close(raw_sockfd);
+#endif
 fail_state:
     perror("error");
     exit(EXIT_FAILURE);
