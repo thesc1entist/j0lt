@@ -103,8 +103,7 @@ const char* g_ansi = {
 #define     ARCOUNT 0x0000 // num RR additional
 // END HEADER VALUES
 
-struct __attribute__((packed, aligned(1))) J0LT_HEADER
-{
+struct __attribute__((packed, aligned(1))) J0LT_HEADER {
     uint16_t	id : 16;
 #if __BYTE_ORDER == __BIG_ENDIAN
     // third byte
@@ -231,7 +230,7 @@ insert_question(void** buf, size_t* buflen,
         uint16_t query_type,
         uint16_t query_class);
 bool
-insert_data(void** dst, size_t* dst_buflen,
+InsertData(void** dst, size_t* dst_buflen,
         const void* src, size_t src_len);
 bool
 insert_header(uint8_t** buf, size_t* buflen,
@@ -243,8 +242,7 @@ create_dns_packet(uint8_t pktbuf[ ], size_t* buflen,
           uint16_t query_type,
           uint16_t query_class);
 int
-main(int argc, char** argv)
-{
+main(int argc, char** argv) {
     struct sockaddr_in addr;
     int sockfd;
     size_t buflen = BUF_MAX;
@@ -311,8 +309,7 @@ create_dns_packet(uint8_t pktbuf[ ], size_t* buflen,
           const struct J0LT_HEADER* header,
           const char* domain,
           uint16_t query_type,
-          uint16_t query_class)
-{
+          uint16_t query_class) {
     uint8_t* curpos = pktbuf;
     bool status = true;
 
@@ -326,8 +323,7 @@ create_dns_packet(uint8_t pktbuf[ ], size_t* buflen,
 
 bool
 insert_header(uint8_t** buf, size_t*
-          buflen, const struct J0LT_HEADER* header)
-{
+          buflen, const struct J0LT_HEADER* header) {
     bool status = true;
     uint8_t third_byte;
     uint8_t fourth_byte;
@@ -357,8 +353,7 @@ insert_header(uint8_t** buf, size_t*
 bool
 insert_question(void** buf, size_t* buflen,
         const char* domain, uint16_t query_type,
-        uint16_t query_class)
-{
+        uint16_t query_class) {
     const char* token;
     char* saveptr, qname[ BUF_MAX ];
     size_t srclen, domainlen;
@@ -378,7 +373,7 @@ insert_question(void** buf, size_t* buflen,
     while (token != NULL) {
         srclen = strlen(token);
         insert_byte(( uint8_t** ) buf, buflen, srclen);
-        insert_data(buf, buflen, token, srclen);
+        InsertData(buf, buflen, token, srclen);
         token = strtok_r(NULL, ".", &saveptr);
     }
 
@@ -394,9 +389,8 @@ insert_question(void** buf, size_t* buflen,
 }
 
 bool
-insert_data(void** dst, size_t* dst_buflen,
-        const void* src, size_t src_len)
-{
+InsertData(void** dst, size_t* dst_buflen,
+        const void* src, size_t src_len) {
     if (*dst_buflen < src_len) {
         return false;
     }
@@ -410,8 +404,7 @@ insert_data(void** dst, size_t* dst_buflen,
 
 int
 connect_client(const char* server, const char*
-           port, struct sockaddr_in* addr)
-{
+           port, struct sockaddr_in* addr) {
     int udp_socket;
     uint16_t port_uint16;
 
