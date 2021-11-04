@@ -363,18 +363,23 @@ insert_question(void** buf, size_t* buflen,
     if (domainlen > BUF_MAX - 1) {
         return false;
     }
+
     memcpy(qname, domain, domainlen);
-
-    token = strtok_r(qname, ".", &saveptr);
-    if (token == NULL) {
-        return false;
+    if (qname[ 0 ] == '.') {
+        insert_byte(( uint8_t** ) buf, buflen, 1);
+        InsertData(buf, buflen, qname, 1);
     }
-
-    while (token != NULL) {
-        srclen = strlen(token);
-        insert_byte(( uint8_t** ) buf, buflen, srclen);
-        InsertData(buf, buflen, token, srclen);
-        token = strtok_r(NULL, ".", &saveptr);
+    else {
+        token = strtok_r(qname, ".", &saveptr);
+        if (token == NULL) {
+            return false;
+        }
+        while (token != NULL) {
+            srclen = strlen(token);
+            insert_byte(( uint8_t** ) buf, buflen, srclen);
+            InsertData(buf, buflen, token, srclen);
+            token = strtok_r(NULL, ".", &saveptr);
+        }
     }
 
     status = true;
