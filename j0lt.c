@@ -298,7 +298,8 @@ main(int argc, char** argv)
     uint32_t spoofip, resolvip;
     uint16_t spoofport;
 
-    if (argc != 3) {
+    // TODO add optargs
+    if (argc != 4) { 
         printf("%s", g_ansi);
         goto fail_state;
     }
@@ -317,7 +318,7 @@ main(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
 
-//TODO: Add fopen() / fread() loop for resolver list
+    //TODO: Add fopen() / fread() loop for resolver list
     resolvip = inet_addr("");
     if (resolvip != 0) {
         resolvip = htonl(resolvip);
