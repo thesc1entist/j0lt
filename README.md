@@ -1,5 +1,6 @@
 # j0lt DNS amplification (DDoS) attack tool
  ------------------------------------------------------------
+ > * spl0its-r-us
  > * the-scientist
  > * tofu@rootstorm.com
  ------------------------------------------------------------
@@ -13,7 +14,7 @@
  > Usage: sudo ./j0lt <target> <port> <num-packets>
  > * (the-scientist㉿rs)-[~/0day]$ gcc j0lt.c -o j0lt
  > * (the-scientist㉿rs)-[~/0day]$ unshare -rn
- > * (the-scientist㉿rs)-[~/0day]# ./j0lt mod.gov.cn 80 1337
+ > * (the-scientist㉿rs)-[~/0day]# ./j0lt 1.1.1.1 5000 1337
  ------------------------------------------------------------
  > What is DNS a amplification attack:
  > * A type of DDoS attack in which attackers use publicly
@@ -23,5 +24,5 @@
  > be the target’s address. When the DNS server sends the  
  > record response, it is sent to the target instead.
  ------------------------------------------------------------
- > Big hi to the only sane place left on the internet:
+ > The only sane place left on the internet:
  * ## irc.efnet.org #c

