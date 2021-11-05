@@ -1,4 +1,8 @@
 #      PRIVATE CONFIDENTIAL
+#         spl0its-r-us
+# ------------------------------
+# the-scientist
+# tofu@rootstorm.com
 # ------------------------------
 #      _________  .__   __   
 #     |__\   _  \ |  |_/  |_ 
@@ -8,10 +12,8 @@
 # \______|      \/           
 # ddos amplification attack tool
 # ------------------------------
-# the-scientist 
-# tofu@rootstorm.com
-# ------------------------------
-# List of open DNS resolvers 
+# list of working open resolvers 
+# updated weekly. 
 # ------------------------------
 
 199.255.137.34
