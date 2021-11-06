@@ -18,10 +18,10 @@
  */
 
  // TODO: 1) replace execv() with posix_spawn() 
- // TODO: 2) clean up code
- // TODO: 3) add optargs
- // TODO: 4) store resolver list in memory file access to slow. 
-  
+ // TODO: 2) add optargs
+ // TODO: 3) store resolver list in memory file access to slow. 
+ // TODO: 4) clean up code
+
 const char* g_ansi = {
     "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                     ░░░░░░░░░░░░░░░\n"
     "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                     ░░░░░░░░░░░░░░░░░\n"
