@@ -1,8 +1,7 @@
 # j0lt DNS amplification (DDoS) attack tool
  ------------------------------------------------------------
  > * spl0its-r-us
- > * the-scientist
- > * tofu@rootstorm.com
+ > * the-scientist@rootstorm.com
  ------------------------------------------------------------
  > Knowledge:
  > * https://datatracker.ietf.org/doc/html/rfc1700    (NUMBERS)
