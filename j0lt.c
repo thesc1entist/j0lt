@@ -18,7 +18,6 @@
  */
 
  // TODO: 1) replace execv() with posix_spawn() 
- // TODO: 2) add optargs
  // TODO: 3) store resolver list in memory file access to slow. 
  // TODO: 4) clean up code
 
@@ -166,7 +165,6 @@ DEFINE_INSERT_FN(qword, uint64_t)
 #define     fork_err_exit(msg) do { perror(msg); \
                                     _exit(EXIT_FAILURE); \
                                     } while (0)
-
 // IP HEADER VALUES
 #define     IP_IHL_MIN_J0LT 5
 #define     IP_IHL_MAX_J0LT 15
