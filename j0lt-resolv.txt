@@ -13,7 +13,6 @@
 # ddos amplification attack tool
 # ------------------------------
 # list of working open resolvers 
-# updated weekly. 
 # ------------------------------
 
 199.255.137.34

