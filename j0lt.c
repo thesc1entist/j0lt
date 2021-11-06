@@ -17,6 +17,10 @@
  * irc.efnet.org #c
  */
 
+ // TODO: 1) replace execv() with posix_spawn() 
+ // TODO: 2) clean up code
+ // TODO: 3) add optargs
+  
 const char* g_ansi = {
     "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                     ░░░░░░░░░░░░░░░\n"
     "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                     ░░░░░░░░░░░░░░░░░\n"
